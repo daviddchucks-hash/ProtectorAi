@@ -30,11 +30,13 @@ const helmetMiddleware = helmet({
 
 // ── CORS ──────────────────────────────────────────────────────
 function buildCorsMiddleware() {
+  // Always allow the GitHub Pages dashboard origin so it can reach the Render backend
+  const GITHUB_PAGES_ORIGIN = 'https://daviddchucks-hash.github.io';
   const rawOrigins = process.env.ALLOWED_ORIGINS || '';
-  const whitelist  = rawOrigins
+  const whitelist  = [GITHUB_PAGES_ORIGIN, ...rawOrigins
     .split(',')
     .map(o => o.trim())
-    .filter(Boolean);
+    .filter(Boolean)];
 
   const corsOptions = {
     origin(origin, callback) {
