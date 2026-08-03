@@ -60,6 +60,11 @@ app.use('/api/stats',     statsRoutes);
 app.use('/api/visitors',  visitorRoutes);
 app.use('/api/alerts',    alertRoutes);
 
+// ── Root → redirect to dashboard ─────────────────────────────
+app.get('/', (req, res) => {
+  res.redirect(301, '/dashboard');
+});
+
 // ── Dashboard SPA (auth-protected) ───────────────────────────
 app.get('/dashboard', dashboardAuth, (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'dashboard', 'index.html'));
