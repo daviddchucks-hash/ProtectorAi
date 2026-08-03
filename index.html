@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Beast AI — Lightweight website security monitoring. Install with one script tag. Real-time visitor tracking, JS error detection, and AI-powered risk scoring.">
+  <title>Beast AI — Website Security Monitoring</title>
+  <style>
+    /* ── CSS Variables (matches dashboard.css exactly) ─────── */
+    :root {
+      --bg:             #0a0c10;
+      --bg-surface:     #0f1117;
+      --bg-card:        #141820;
+      --bg-hover:       #1c2130;
+      --border:         rgba(255,255,255,.08);
+      --border-strong:  rgba(255,255,255,.14);
+      --text-primary:   #e8eaf0;
+      --text-secondary: #8892a4;
+      --text-muted:     #556070;
+      --accent:         #4f8ef7;
+      --accent-glow:    rgba(79,142,247,.2);
+      --danger:         #f74f4f;
+      --danger-bg:      rgba(247,79,79,.12);
+      --warning:        #f7a74f;
+      --warning-bg:     rgba(247,167,79,.12);
+      --success:        #4ff79c;
+      --success-bg:     rgba(79,247,156,.12);
+      --critical-color: #ff3a3a;
+      --high-color:     #ff7a3a;
+      --medium-color:   #ffcc3a;
+      --low-color:      #4ff79c;
+      --radius:         10px;
+      --radius-sm:      6px;
+      --shadow:         0 4px 24px rgba(0,0,0,.4);
+      --transition:     all .18s ease;
+    }
+
+    /* ── Reset ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Nav ───────────────────────────────────────────────── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(10,12,16,.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 5%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: .95rem;
+      text-decoration: none; color: var(--text-primary);
+    }
+    .nav-brand-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, #4f8ef7, #7c3aed);
+      border-radius: 8px;
+      display: grid; place-items: center;
+      font-size: 1rem;
+      box-shadow: 0 0 12px var(--accent-glow);
+      flex-shrink: 0;
+    }
+    .nav-links {
+      display: flex; align-items: center; gap: 6px;
+      list-style: none;
+    }
+    .nav-links a {
+      font-size: .83rem;
+      color: var(--text-secondary);
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      transition: var(--transition);
+      font-weight: 500;
+      text-decoration: none;
+    }
+    .nav-links a:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .nav-cta {
+      background: var(--accent) !important;
+      color: #fff !important;
+      font-weight: 600 !important;
+      padding: 7px 16px !important;
+      border-radius: var(--radius-sm) !important;
+    }
+    .nav-cta:hover { opacity: .9; background: var(--accent) !important; }
+    .nav-mobile-toggle {
+      display: none;
+      background: none; border: none;
+      color: var(--text-secondary);
+      font-size: 1.4rem; cursor: pointer;
+    }
+
+    /* ── Hero ──────────────────────────────────────────────── */
+    .hero {
+      min-height: 88vh;
+      display: flex; align-items: center;
+      position: relative;
+      overflow: hidden;
+      padding: 80px 5% 60px;
+    }
+    .hero-bg {
+      position: absolute; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 70% 55% at 60% 40%, rgba(79,142,247,.08) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 40% at 20% 70%, rgba(124,58,237,.06) 0%, transparent 60%);
+    }
+    .hero-grid {
+      position: absolute; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(79,142,247,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(79,142,247,.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+    .hero-content {
+      position: relative; z-index: 1;
+      max-width: 680px;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--accent-glow);
+      border: 1px solid rgba(79,142,247,.3);
+      border-radius: 99px;
+      padding: 5px 14px;
+      font-size: .75rem; font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 28px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .hero-badge-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.6rem);
+      font-weight: 800;
+      line-height: 1.12;
+      letter-spacing: -.02em;
+      margin-bottom: 22px;
+    }
+    .hero h1 .accent { color: var(--accent); }
+    .hero p {
+      font-size: 1.1rem;
+      color: var(--text-secondary);
+      max-width: 560px;
+      margin-bottom: 36px;
+      line-height: 1.7;
+    }
+    .hero-actions {
+      display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+      margin-bottom: 48px;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 13px 28px;
+      border-radius: var(--radius-sm);
+      font-size: .92rem; font-weight: 700;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex; align-items: center; gap: 8px;
+      text-decoration: none;
+    }
+    .btn-primary:hover { opacity: .88; transform: translateY(-1px); text-decoration: none; }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+      padding: 13px 28px;
+      border-radius: var(--radius-sm);
+      font-size: .92rem; font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex; align-items: center; gap: 8px;
+      text-decoration: none;
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+    .hero-code-block {
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+      max-width: 100%;
+      box-shadow: var(--shadow);
+    }
+    .hero-code-block code {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: .82rem;
+      color: var(--success);
+      white-space: nowrap;
+      overflow: auto;
+    }
+    .copy-btn {
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 6px 12px;
+      font-size: .75rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+    .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .copy-btn.copied { color: var(--success); border-color: var(--success); }
+
+    /* ── Stats strip ───────────────────────────────────────── */
+    .stats-strip {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 32px 5%;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 24px;
+    }
+    .strip-stat { text-align: center; }
+    .strip-stat-value {
+      font-size: 2rem; font-weight: 800;
+      color: var(--accent);
+      display: block;
+    }
+    .strip-stat-label {
+      font-size: .78rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ── Sections ──────────────────────────────────────────── */
+    section { padding: 80px 5%; }
+    .section-label {
+      font-size: .72rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 14px;
+    }
+    .section-sub {
+      font-size: 1rem;
+      color: var(--text-secondary);
+      max-width: 560px;
+      margin-bottom: 48px;
+      line-height: 1.7;
+    }
+
+    /* ── Features grid ─────────────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 18px;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      transition: var(--transition);
+    }
+    .feature-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 24px var(--accent-glow);
+      transform: translateY(-2px);
+    }
+    .feature-icon {
+      width: 44px; height: 44px;
+      border-radius: var(--radius-sm);
+      display: grid; place-items: center;
+      font-size: 1.3rem;
+      margin-bottom: 16px;
+    }
+    .fi-blue   { background: var(--accent-glow); }
+    .fi-purple { background: rgba(124,58,237,.15); }
+    .fi-green  { background: var(--success-bg); }
+    .fi-orange { background: var(--warning-bg); }
+    .fi-red    { background: var(--danger-bg); }
+    .fi-teal   { background: rgba(79,247,220,.1); }
+    .feature-card h3 { font-size: .95rem; font-weight: 700; margin-bottom: 8px; }
+    .feature-card p  { font-size: .83rem; color: var(--text-secondary); line-height: 1.6; }
+
+    /* ── How it works ──────────────────────────────────────── */
+    .how-bg { background: var(--bg-surface); }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0;
+      position: relative;
+    }
+    .step {
+      padding: 32px 28px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-card);
+      position: relative;
+      text-align: center;
+    }
+    .step + .step { margin-left: 0; }
+    .steps .step:not(:last-child)::after {
+      content: '→';
+      position: absolute;
+      right: -18px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--accent);
+      font-size: 1.2rem;
+      z-index: 2;
+    }
+    @media (max-width: 700px) {
+      .steps .step:not(:last-child)::after { display: none; }
+    }
+    .step-number {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--accent-glow);
+      border: 1px solid rgba(79,142,247,.3);
+      color: var(--accent);
+      font-size: .85rem; font-weight: 800;
+      display: grid; place-items: center;
+      margin: 0 auto 16px;
+    }
+    .step h3 { font-size: .9rem; font-weight: 700; margin-bottom: 8px; }
+    .step p  { font-size: .81rem; color: var(--text-secondary); }
+
+    /* ── Risk levels ───────────────────────────────────────── */
+    .risk-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+    }
+    .risk-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 20px;
+      transition: var(--transition);
+    }
+    .risk-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+    .risk-card.low      { border-top: 3px solid var(--low-color); }
+    .risk-card.medium   { border-top: 3px solid var(--medium-color); }
+    .risk-card.high     { border-top: 3px solid var(--high-color); }
+    .risk-card.critical { border-top: 3px solid var(--critical-color); }
+    .risk-level {
+      font-size: .7rem; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 3px 10px; border-radius: 99px;
+      display: inline-block; margin-bottom: 14px;
+    }
+    .risk-level.low      { background: var(--success-bg); color: var(--low-color); }
+    .risk-level.medium   { background: var(--warning-bg); color: var(--medium-color); }
+    .risk-level.high     { background: rgba(247,122,58,.12); color: var(--high-color); }
+    .risk-level.critical { background: var(--danger-bg); color: var(--critical-color); }
+    .risk-range {
+      font-size: 1.6rem; font-weight: 800; display: block; margin-bottom: 6px;
+    }
+    .risk-desc { font-size: .8rem; color: var(--text-secondary); line-height: 1.5; }
+
+    /* ── Install block ─────────────────────────────────────── */
+    .install-section { background: var(--bg-surface); }
+    .install-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      overflow: hidden;
+      max-width: 760px;
+      box-shadow: var(--shadow);
+    }
+    .install-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+    }
+    .install-tab {
+      padding: 12px 20px;
+      font-size: .8rem; font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: var(--transition);
+      background: none; border-right: none; border-left: none; border-top: none;
+    }
+    .install-tab:hover { color: var(--text-primary); }
+    .install-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .install-pane { display: none; padding: 24px; }
+    .install-pane.active { display: block; }
+    .code-block {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px 18px;
+      position: relative;
+      margin-bottom: 14px;
+    }
+    .code-block pre {
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: .82rem;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .code-block pre .kw  { color: var(--accent); }
+    .code-block pre .str { color: var(--success); }
+    .code-block pre .cm  { color: var(--text-muted); font-style: italic; }
+    .code-block pre .hl  { color: var(--warning); }
+    .code-copy {
+      position: absolute; top: 10px; right: 10px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 4px 10px;
+      font-size: .72rem; color: var(--text-muted);
+      cursor: pointer; transition: var(--transition);
+    }
+    .code-copy:hover { color: var(--accent); border-color: var(--accent); }
+    .code-copy.copied { color: var(--success); border-color: var(--success); }
+    .install-note {
+      font-size: .8rem; color: var(--text-muted); margin-top: 10px;
+    }
+    .install-note a { color: var(--accent); }
+
+    /* ── Dashboard preview ─────────────────────────────────── */
+    .preview-section { text-align: center; }
+    .preview-frame {
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,.6);
+      max-width: 880px;
+      margin: 0 auto;
+    }
+    .preview-bar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot.red    { background: #ff5f57; }
+    .dot.yellow { background: #febc2e; }
+    .dot.green  { background: #28c840; }
+    .preview-url {
+      flex: 1; text-align: center; font-size: .75rem;
+      color: var(--text-muted); font-family: monospace;
+    }
+    .preview-content {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+    }
+    .preview-sidebar {
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      padding: 20px 0;
+    }
+    .preview-brand {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .preview-brand-icon {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, #4f8ef7, #7c3aed);
+      border-radius: 7px;
+      display: grid; place-items: center;
+      font-size: .8rem;
+    }
+    .preview-brand-text { font-size: .78rem; font-weight: 700; }
+    .preview-nav { padding: 12px 8px; }
+    .preview-nav-item {
+      padding: 8px 10px; border-radius: 5px;
+      font-size: .75rem; color: var(--text-secondary);
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 2px;
+    }
+    .preview-nav-item.active { background: var(--accent-glow); color: var(--accent); }
+    .preview-main { padding: 24px; }
+    .preview-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+      margin-bottom: 20px;
+    }
+    .preview-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 12px;
+    }
+    .preview-card-val { font-size: 1.2rem; font-weight: 800; color: var(--text-primary); }
+    .preview-card-lbl { font-size: .62rem; color: var(--text-muted); margin-top: 3px; }
+    .preview-card.live { border-color: var(--success); }
+    .preview-card.live .preview-card-val { color: var(--success); }
+    .preview-card.crit { border-color: var(--danger); }
+    .preview-card.crit .preview-card-val { color: var(--danger); }
+    .preview-timeline { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 14px; }
+    .preview-tl-header { font-size: .7rem; font-weight: 700; color: var(--text-muted); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .06em; }
+    .preview-tl-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 0; border-bottom: 1px solid var(--border);
+      font-size: .72rem;
+    }
+    .preview-tl-row:last-child { border-bottom: none; }
+    .tl-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .tl-dot.low { background: var(--low-color); }
+    .tl-dot.medium { background: var(--medium-color); }
+    .tl-dot.high { background: var(--high-color); }
+    .tl-dot.critical { background: var(--critical-color); box-shadow: 0 0 5px var(--critical-color); }
+    .tl-type { font-weight: 600; flex: 1; color: var(--text-secondary); }
+    .tl-time { color: var(--text-muted); flex-shrink: 0; }
+
+    /* ── CTA ───────────────────────────────────────────────── */
+    .cta-section {
+      text-align: center;
+      background: linear-gradient(135deg, rgba(79,142,247,.06) 0%, rgba(124,58,237,.06) 100%);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .cta-section h2 { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; margin-bottom: 16px; }
+    .cta-section p  { font-size: 1rem; color: var(--text-secondary); max-width: 480px; margin: 0 auto 36px; }
+
+    /* ── Footer ────────────────────────────────────────────── */
+    footer {
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      padding: 40px 5%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+    .footer-brand {
+      display: flex; align-items: center; gap: 10px;
+      font-weight: 700; font-size: .9rem;
+    }
+    .footer-icon {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, #4f8ef7, #7c3aed);
+      border-radius: 7px;
+      display: grid; place-items: center;
+      font-size: .8rem;
+    }
+    .footer-links { display: flex; gap: 20px; flex-wrap: wrap; }
+    .footer-links a { font-size: .82rem; color: var(--text-muted); transition: var(--transition); }
+    .footer-links a:hover { color: var(--accent); text-decoration: none; }
+    .footer-copy { font-size: .78rem; color: var(--text-muted); }
+
+    /* ── Animations ────────────────────────────────────────── */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:none} }
+    .fade-up { animation: fadeUp .6s ease both; }
+    .fade-up-2 { animation: fadeUp .6s .15s ease both; }
+    .fade-up-3 { animation: fadeUp .6s .3s ease both; }
+
+    /* ── Responsive ────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-mobile-toggle { display: block; }
+      .nav-links.open {
+        display: flex; flex-direction: column;
+        position: absolute; top: 60px; left: 0; right: 0;
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border);
+        padding: 16px;
+        z-index: 200;
+      }
+      .hero { min-height: auto; padding: 60px 5% 40px; }
+      .preview-content { grid-template-columns: 1fr; }
+      .preview-sidebar { display: none; }
+      .preview-grid { grid-template-columns: repeat(2, 1fr); }
+      .steps { grid-template-columns: 1fr; gap: 12px; }
+      footer { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Nav ───────────────────────────────────────────────── -->
+  <nav>
+    <a class="nav-brand" href="#">
+      <div class="nav-brand-icon">🛡</div>
+      Beast AI
+    </a>
+    <ul class="nav-links" id="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+      <li><a href="#risk">Risk Levels</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="ProtectorAi/dashboard/" class="nav-cta">Open Dashboard</a></li>
+    </ul>
+    <button class="nav-mobile-toggle" id="nav-toggle" aria-label="Toggle menu">☰</button>
+  </nav>
+
+  <!-- ── Hero ──────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-grid"></div>
+    <div class="hero-content">
+      <div class="hero-badge fade-up">
+        <span class="hero-badge-dot"></span>
+        Real-time Security Monitoring
+      </div>
+      <h1 class="fade-up-2">
+        Protect your website<br>
+        with <span class="accent">one script tag</span>
+      </h1>
+      <p class="fade-up-3">
+        Beast AI monitors your site in real time — tracking visitors, catching JS errors,
+        detecting suspicious behavior, and scoring every event by risk level.
+        Zero configuration. Zero dependencies.
+      </p>
+      <div class="hero-actions fade-up-3">
+        <a href="#install" class="btn-primary">Get Started Free</a>
+        <a href="ProtectorAi/dashboard/" class="btn-secondary">View Dashboard →</a>
+      </div>
+      <div class="hero-code-block fade-up-3">
+        <code id="hero-snippet">&lt;script src="https://your-app.onrender.com/beast.js"&gt;&lt;/script&gt;</code>
+        <button class="copy-btn" onclick="copySnippet(this)">Copy</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Stats strip ───────────────────────────────────────── -->
+  <div class="stats-strip">
+    <div class="strip-stat">
+      <span class="strip-stat-value">1</span>
+      <div class="strip-stat-label">Script tag to install</div>
+    </div>
+    <div class="strip-stat">
+      <span class="strip-stat-value">4</span>
+      <div class="strip-stat-label">Risk levels detected</div>
+    </div>
+    <div class="strip-stat">
+      <span class="strip-stat-value">8+</span>
+      <div class="strip-stat-label">Event types tracked</div>
+    </div>
+    <div class="strip-stat">
+      <span class="strip-stat-value">30s</span>
+      <div class="strip-stat-label">Dashboard auto-refresh</div>
+    </div>
+  </div>
+
+  <!-- ── Features ──────────────────────────────────────────── -->
+  <section id="features">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Everything you need to secure your site</h2>
+    <p class="section-sub">
+      Beast AI gives you full visibility into what's happening on your website —
+      without any complex setup or third-party services beyond Firebase.
+    </p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon fi-blue">👥</div>
+        <h3>Visitor Tracking</h3>
+        <p>Every visitor is fingerprinted by browser, OS, device, language, timezone, and screen size. See who's online right now and their full session history.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon fi-red">🐛</div>
+        <h3>JS Error Capture</h3>
+        <p>Catches uncaught exceptions, unhandled promise rejections, and console errors in real time. Know about crashes before your users complain.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon fi-orange">⚡</div>
+        <h3>Behavior Detection</h3>
+        <p>Detects rapid click bursts, abnormal form submission patterns, failed resource loads, and other suspicious behavioral signals automatically.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon fi-purple">🎯</div>
+        <h3>AI Risk Scoring</h3>
+        <p>Every event gets a risk score from 0–100. Events are classified as Low, Medium, High, or Critical so you know exactly where to focus attention.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon fi-green">⏱</div>
+        <h3>Performance Monitoring</h3>
+        <p>Measures real page load times across your visitor base. Track average load time in the dashboard and catch performance regressions fast.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon fi-teal">🚨</div>
+        <h3>Alerts & Actions</h3>
+        <p>High and Critical events automatically surface as alerts with recommended actions. Resolve them in one click directly from the dashboard.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── How it works ──────────────────────────────────────── -->
+  <section id="how-it-works" class="how-bg">
+    <div class="section-label">How it works</div>
+    <h2 class="section-title">Up and running in minutes</h2>
+    <p class="section-sub">Beast AI is designed to require as little setup as possible.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-number">1</div>
+        <h3>Deploy the server</h3>
+        <p>Deploy the Beast AI Node.js server to Render (or any Node host). It connects to your Firebase Firestore for storage.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">2</div>
+        <h3>Add the script tag</h3>
+        <p>Paste one <code style="color:var(--success);font-size:.8rem">&lt;script&gt;</code> tag before <code style="color:var(--success);font-size:.8rem">&lt;/body&gt;</code> on every page you want to monitor.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <h3>Open the dashboard</h3>
+        <p>Visit <code style="color:var(--success);font-size:.8rem">/dashboard</code> on your deployed URL. Events start streaming within seconds.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">4</div>
+        <h3>Act on alerts</h3>
+        <p>High and Critical alerts appear instantly. Review visitor details, event history, and resolve threats in one click.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Risk levels ───────────────────────────────────────── -->
+  <section id="risk">
+    <div class="section-label">Risk Engine</div>
+    <h2 class="section-title">Four-tier threat classification</h2>
+    <p class="section-sub">
+      Every event Beast AI captures gets scored 0–100 and classified into one of four risk tiers,
+      so you can immediately prioritize what matters.
+    </p>
+    <div class="risk-grid">
+      <div class="risk-card low">
+        <span class="risk-level low">Low</span>
+        <span class="risk-range" style="color:var(--low-color)">0 – 24</span>
+        <p class="risk-desc">Normal activity. Regular page views, sessions, and standard user behavior. No action needed.</p>
+      </div>
+      <div class="risk-card medium">
+        <span class="risk-level medium">Medium</span>
+        <span class="risk-range" style="color:var(--medium-color)">25 – 49</span>
+        <p class="risk-desc">Unusual but not alarming. Slightly elevated activity worth keeping an eye on over time.</p>
+      </div>
+      <div class="risk-card high">
+        <span class="risk-level high">High</span>
+        <span class="risk-range" style="color:var(--high-color)">50 – 74</span>
+        <p class="risk-desc">Suspicious behavior detected. Review recommended — rapid clicks, repeated errors, or failed resources.</p>
+      </div>
+      <div class="risk-card critical">
+        <span class="risk-level critical">Critical</span>
+        <span class="risk-range" style="color:var(--critical-color)">75 – 100</span>
+        <p class="risk-desc">Immediate attention required. Potential attack or serious anomaly. Act on these alerts right away.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Dashboard preview ─────────────────────────────────── -->
+  <section class="how-bg preview-section" id="dashboard">
+    <div class="section-label">Dashboard</div>
+    <h2 class="section-title">Everything in one view</h2>
+    <p class="section-sub" style="margin:0 auto 40px">
+      The live dashboard gives you instant visibility into visitors, events, risk scores, and alerts — auto-refreshing every 30 seconds.
+    </p>
+    <div class="preview-frame">
+      <div class="preview-bar">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+        <span class="preview-url">your-app.onrender.com/dashboard</span>
+      </div>
+      <div class="preview-content">
+        <div class="preview-sidebar">
+          <div class="preview-brand">
+            <div class="preview-brand-icon">🛡</div>
+            <span class="preview-brand-text">Beast AI</span>
+          </div>
+          <div class="preview-nav">
+            <div class="preview-nav-item active">📊 Overview</div>
+            <div class="preview-nav-item">⚡ Events</div>
+            <div class="preview-nav-item">👥 Visitors</div>
+            <div class="preview-nav-item">🚨 Alerts <span style="background:var(--danger);color:#fff;font-size:.6rem;padding:1px 5px;border-radius:99px;margin-left:auto">3</span></div>
+          </div>
+        </div>
+        <div class="preview-main">
+          <div class="preview-grid">
+            <div class="preview-card">
+              <div class="preview-card-val">1,247</div>
+              <div class="preview-card-lbl">Total Visitors</div>
+            </div>
+            <div class="preview-card live">
+              <div class="preview-card-val">12</div>
+              <div class="preview-card-lbl">Live Now</div>
+            </div>
+            <div class="preview-card">
+              <div class="preview-card-val">8,430</div>
+              <div class="preview-card-lbl">Total Events</div>
+            </div>
+            <div class="preview-card crit">
+              <div class="preview-card-val">3</div>
+              <div class="preview-card-lbl">Critical</div>
+            </div>
+          </div>
+          <div class="preview-timeline">
+            <div class="preview-tl-header">Recent Events</div>
+            <div class="preview-tl-row">
+              <span class="tl-dot critical"></span>
+              <span class="tl-type">rapid_clicks</span>
+              <span style="font-size:.7rem;color:var(--critical-color);background:var(--danger-bg);padding:1px 7px;border-radius:99px">CRITICAL</span>
+              <span class="tl-time">2s ago</span>
+            </div>
+            <div class="preview-tl-row">
+              <span class="tl-dot high"></span>
+              <span class="tl-type">js_error</span>
+              <span style="font-size:.7rem;color:var(--high-color);background:rgba(247,122,58,.12);padding:1px 7px;border-radius:99px">HIGH</span>
+              <span class="tl-time">14s ago</span>
+            </div>
+            <div class="preview-tl-row">
+              <span class="tl-dot low"></span>
+              <span class="tl-type">page_view</span>
+              <span style="font-size:.7rem;color:var(--low-color);background:var(--success-bg);padding:1px 7px;border-radius:99px">LOW</span>
+              <span class="tl-time">18s ago</span>
+            </div>
+            <div class="preview-tl-row">
+              <span class="tl-dot medium"></span>
+              <span class="tl-type">failed_resource</span>
+              <span style="font-size:.7rem;color:var(--medium-color);background:var(--warning-bg);padding:1px 7px;border-radius:99px">MEDIUM</span>
+              <span class="tl-time">35s ago</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Install ────────────────────────────────────────────── -->
+  <section id="install">
+    <div class="section-label">Installation</div>
+    <h2 class="section-title">Get started in 3 steps</h2>
+    <p class="section-sub">
+      Beast AI requires a Firebase project for storage and a Node.js host like Render.
+      See the <a href="ProtectorAi/docs/render-deploy.md">Render deploy guide</a> and <a href="ProtectorAi/docs/firebase-setup.md">Firebase setup</a> for full instructions.
+    </p>
+    <div class="install-card">
+      <div class="install-tabs">
+        <button class="install-tab active" onclick="switchTab(this,'tab-script')">1. Embed Script</button>
+        <button class="install-tab" onclick="switchTab(this,'tab-env')">2. Environment</button>
+        <button class="install-tab" onclick="switchTab(this,'tab-server')">3. Start Server</button>
+      </div>
+
+      <div class="install-pane active" id="tab-script">
+        <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:16px">
+          Add this tag before <code style="color:var(--success)">&lt;/body&gt;</code> on every page you want to monitor:
+        </p>
+        <div class="code-block">
+          <button class="code-copy" onclick="copyCode(this, 'snippet-script')">Copy</button>
+          <pre id="snippet-script"><span class="cm">&lt;!-- Beast AI — add before &lt;/body&gt; --&gt;</span>
+<span class="kw">&lt;script</span> <span class="hl">src</span>=<span class="str">"https://YOUR-APP-NAME.onrender.com/beast.js"</span><span class="kw">&gt;&lt;/script&gt;</span></pre>
+        </div>
+        <p class="install-note">Replace <code>YOUR-APP-NAME</code> with your Render deployment URL. Beast AI initialises automatically — no further configuration needed on the client.</p>
+      </div>
+
+      <div class="install-pane" id="tab-env">
+        <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:16px">
+          Copy <code style="color:var(--success)">.env.example</code> to <code style="color:var(--success)">.env</code> and fill in your values:
+        </p>
+        <div class="code-block">
+          <button class="code-copy" onclick="copyCode(this, 'snippet-env')">Copy</button>
+          <pre id="snippet-env"><span class="cm"># Firebase Admin SDK</span>
+<span class="hl">FIREBASE_PROJECT_ID</span>=<span class="str">your-project-id</span>
+<span class="hl">FIREBASE_PRIVATE_KEY</span>=<span class="str">"-----BEGIN PRIVATE KEY-----\n..."</span>
+<span class="hl">FIREBASE_CLIENT_EMAIL</span>=<span class="str">firebase-adminsdk@your-project.iam.gserviceaccount.com</span>
+
+<span class="cm"># CORS — allowed origins (comma-separated)</span>
+<span class="hl">ALLOWED_ORIGINS</span>=<span class="str">https://yourdomain.com</span>
+
+<span class="cm"># Dashboard access token (use a strong random string)</span>
+<span class="hl">DASHBOARD_TOKEN</span>=<span class="str">change-me-to-a-strong-secret</span>
+
+<span class="cm"># Your Render deployment URL</span>
+<span class="hl">RENDER_URL</span>=<span class="str">https://your-app.onrender.com</span></pre>
+        </div>
+        <p class="install-note">See <a href="ProtectorAi/docs/firebase-setup.md">docs/firebase-setup.md</a> for step-by-step Firebase configuration.</p>
+      </div>
+
+      <div class="install-pane" id="tab-server">
+        <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:16px">Install dependencies and start the server:</p>
+        <div class="code-block">
+          <button class="code-copy" onclick="copyCode(this, 'snippet-server')">Copy</button>
+          <pre id="snippet-server"><span class="cm"># Clone the repository</span>
+<span class="kw">git</span> <span class="hl">clone</span> https://github.com/daviddchucks-hash/ProtectorAi.git
+<span class="kw">cd</span> ProtectorAi/ProtectorAi
+
+<span class="cm"># Install dependencies</span>
+<span class="kw">npm</span> install
+
+<span class="cm"># Copy and configure environment</span>
+<span class="kw">cp</span> .env.example .env
+<span class="cm"># Edit .env with your Firebase credentials</span>
+
+<span class="cm"># Start development server</span>
+<span class="kw">npm</span> run dev</pre>
+        </div>
+        <p class="install-note">For production, deploy to <a href="ProtectorAi/docs/render-deploy.md">Render</a> — see the full guide in <code>docs/render-deploy.md</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA ───────────────────────────────────────────────── -->
+  <section class="cta-section">
+    <div class="section-label" style="margin:0 auto 14px">Open source · MIT license</div>
+    <h2>Start monitoring your website today</h2>
+    <p>Beast AI is free, open source, and deploys in minutes. One script tag is all it takes.</p>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+      <a href="https://github.com/daviddchucks-hash/ProtectorAi" class="btn-primary" target="_blank">
+        View on GitHub
+      </a>
+      <a href="ProtectorAi/dashboard/" class="btn-secondary">Open Dashboard →</a>
+    </div>
+  </section>
+
+  <!-- ── Footer ────────────────────────────────────────────── -->
+  <footer>
+    <div class="footer-brand">
+      <div class="footer-icon">🛡</div>
+      Beast AI
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/daviddchucks-hash/ProtectorAi" target="_blank">GitHub</a>
+      <a href="ProtectorAi/docs/api-reference.md">API Reference</a>
+      <a href="ProtectorAi/docs/render-deploy.md">Deploy Guide</a>
+      <a href="ProtectorAi/docs/firebase-setup.md">Firebase Setup</a>
+      <a href="ProtectorAi/dashboard/">Dashboard</a>
+    </div>
+    <p class="footer-copy">MIT License · Beast AI v1</p>
+  </footer>
+
+  <script>
+    // ── Mobile nav toggle
+    document.getElementById('nav-toggle').addEventListener('click', function () {
+      document.getElementById('nav-links').classList.toggle('open');
+    });
+
+    // ── Copy hero snippet
+    function copySnippet(btn) {
+      var text = document.getElementById('hero-snippet').textContent;
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    // ── Copy code blocks
+    function copyCode(btn, id) {
+      var text = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    // ── Install tabs
+    function switchTab(btn, paneId) {
+      document.querySelectorAll('.install-tab').forEach(function (t) {
+        t.classList.remove('active');
+      });
+      document.querySelectorAll('.install-pane').forEach(function (p) {
+        p.classList.remove('active');
+      });
+      btn.classList.add('active');
+      document.getElementById(paneId).classList.add('active');
+    }
+
+    // ── Smooth scroll for nav links
+    document.querySelectorAll('a[href^="#"]').forEach(function (link) {
+      link.addEventListener('click', function (e) {
+        var target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          document.getElementById('nav-links').classList.remove('open');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
