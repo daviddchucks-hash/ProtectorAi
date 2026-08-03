@@ -10,4 +10,4 @@
  * with your actual URL, e.g.:
  *   window.BEAST_AI_URL = 'https://protector-ai.onrender.com';
  */
-window.BEAST_AI_URL = 'https://YOUR-APP-NAME.onrender.com';
+window.BEAST_AI_URL = 'https://protectorai-1.onrender.com';

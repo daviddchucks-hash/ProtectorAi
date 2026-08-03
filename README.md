@@ -22,14 +22,14 @@ Beast AI monitors your website in real time:
 Paste this before `</body>` on every page you want to monitor:
 
 ```html
-<script src="https://YOUR_RENDER_DOMAIN/beast.js"></script>
+<script src="https://protectorai-1.onrender.com/beast.js"></script>
 ```
 
 Beast AI initialises automatically — no configuration needed.
 
 ### 2. View your dashboard
 
-Open `https://YOUR_RENDER_DOMAIN/dashboard` in a browser.
+Open `https://protectorai-1.onrender.com/dashboard` in a browser.
 
 ---
 

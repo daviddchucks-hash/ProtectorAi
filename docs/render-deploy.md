@@ -42,15 +42,15 @@ Click **Create Web Service**. Render will build and deploy automatically.
 
 Your SDK URL will be:
 ```
-https://YOUR_APP_NAME.onrender.com/beast.js
+https://protectorai-1.onrender.com/beast.js
 ```
 
 ### 4. Update your website
 
-Replace `YOUR_RENDER_DOMAIN` in the install snippet:
+Add the install snippet before `</body>` on every page you want to monitor:
 
 ```html
-<script src="https://YOUR_APP_NAME.onrender.com/beast.js"></script>
+<script src="https://protectorai-1.onrender.com/beast.js"></script>
 ```
 
 ---
