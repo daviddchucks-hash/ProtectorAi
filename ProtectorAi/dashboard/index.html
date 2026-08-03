@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beast AI — Security Dashboard</title>
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+  <!-- ── Sidebar ──────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">🛡</div>
+      <div class="brand-text">
+        <span class="brand-name">Beast AI</span>
+        <span class="brand-version">v1 · Security Monitor</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-view="overview">
+        <span class="nav-icon">📊</span>Overview
+      </a>
+      <a class="nav-item" data-view="events">
+        <span class="nav-icon">⚡</span>Events
+        <span class="nav-badge" id="events-badge"></span>
+      </a>
+      <a class="nav-item" data-view="visitors">
+        <span class="nav-icon">👥</span>Visitors
+      </a>
+      <a class="nav-item" data-view="alerts">
+        <span class="nav-icon">🚨</span>Alerts
+        <span class="nav-badge danger" id="alerts-badge"></span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="connection-status" id="connection-status">
+        <span class="status-dot online"></span>
+        <span class="status-text">Live</span>
+      </div>
+      <div class="refresh-info">
+        Auto-refresh: <span id="refresh-countdown">30</span>s
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ──────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title" id="page-title">Overview</h1>
+        <span class="topbar-time" id="topbar-time"></span>
+      </div>
+      <div class="topbar-right">
+        <div class="site-filter">
+          <label for="site-id-input">Site ID</label>
+          <input type="text" id="site-id-input" placeholder="all sites" />
+        </div>
+        <button class="btn btn-ghost" id="refresh-btn">↻ Refresh</button>
+        <button class="btn btn-ghost" id="theme-btn" title="Toggle theme">🌙</button>
+      </div>
+    </header>
+
+    <!-- ── OVERVIEW VIEW ─────────────────────────────────────────── -->
+    <section class="view active" id="view-overview">
+
+      <!-- Stat cards row 1 -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card" id="card-visitors">
+          <div class="stat-icon">👥</div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-total-visitors">—</div>
+            <div class="stat-label">Total Visitors</div>
+          </div>
+        </div>
+        <div class="stat-card highlight" id="card-live">
+          <div class="stat-icon pulse">🟢</div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-live-visitors">—</div>
+            <div class="stat-label">Live Now</div>
+          </div>
+        </div>
+        <div class="stat-card" id="card-events">
+          <div class="stat-icon">⚡</div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-total-events">—</div>
+            <div class="stat-label">Total Events</div>
+          </div>
+        </div>
+        <div class="stat-card" id="card-alerts">
+          <div class="stat-icon">🚨</div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-total-alerts">—</div>
+            <div class="stat-label">Alerts</div>
+          </div>
+        </div>
+        <div class="stat-card danger" id="card-critical">
+          <div class="stat-icon">🔴</div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-critical">—</div>
+            <div class="stat-label">Critical</div>
+          </div>
+        </div>
+        <div class="stat-card" id="card-errors">
+          <div class="stat-icon">🐛</div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-js-errors">—</div>
+            <div class="stat-label">JS Errors</div>
+          </div>
+        </div>
+        <div class="stat-card" id="card-threat">
+          <div class="stat-icon">🎯</div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-avg-threat">—</div>
+            <div class="stat-label">Avg Threat Score</div>
+          </div>
+        </div>
+        <div class="stat-card" id="card-perf">
+          <div class="stat-icon">⏱</div>
+          <div class="stat-body">
+            <div class="stat-value" id="stat-avg-load">—</div>
+            <div class="stat-label">Avg Load Time</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="charts-row">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Browsers</h3>
+          </div>
+          <div class="bar-chart" id="chart-browsers"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Operating Systems</h3>
+          </div>
+          <div class="bar-chart" id="chart-os"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Event Types</h3>
+          </div>
+          <div class="bar-chart" id="chart-event-types"></div>
+        </div>
+      </div>
+
+      <!-- Recent events timeline -->
+      <div class="card full-width">
+        <div class="card-header">
+          <h3 class="card-title">Recent Events</h3>
+          <span class="card-subtitle" id="recent-count"></span>
+        </div>
+        <div class="timeline" id="timeline"></div>
+      </div>
+
+    </section>
+
+    <!-- ── EVENTS VIEW ────────────────────────────────────────────── -->
+    <section class="view" id="view-events">
+      <div class="card full-width">
+        <div class="card-header">
+          <h3 class="card-title">Event History</h3>
+          <div class="filter-row">
+            <select id="event-type-filter" class="select-sm">
+              <option value="">All types</option>
+              <option value="js_error">JS Errors</option>
+              <option value="console_error">Console Errors</option>
+              <option value="failed_resource">Failed Resources</option>
+              <option value="rapid_clicks">Rapid Clicks</option>
+              <option value="rapid_form_submit">Rapid Form Submits</option>
+              <option value="performance">Performance</option>
+              <option value="page_view">Page Views</option>
+              <option value="session_start">Session Starts</option>
+            </select>
+            <button class="btn btn-sm" id="load-events-btn">Load</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="events-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Type</th>
+                <th>Risk</th>
+                <th>Score</th>
+                <th>Visitor</th>
+                <th>Page</th>
+                <th>Browser</th>
+                <th>OS</th>
+              </tr>
+            </thead>
+            <tbody id="events-tbody">
+              <tr><td colspan="8" class="empty-row">Loading events…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── VISITORS VIEW ──────────────────────────────────────────── -->
+    <section class="view" id="view-visitors">
+      <div class="card full-width">
+        <div class="card-header">
+          <h3 class="card-title">Visitors</h3>
+          <button class="btn btn-sm" id="load-visitors-btn">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table id="visitors-table">
+            <thead>
+              <tr>
+                <th>Visitor ID</th>
+                <th>Status</th>
+                <th>Browser</th>
+                <th>OS</th>
+                <th>Device</th>
+                <th>Language</th>
+                <th>Timezone</th>
+                <th>Last Seen</th>
+                <th>First Seen</th>
+              </tr>
+            </thead>
+            <tbody id="visitors-tbody">
+              <tr><td colspan="9" class="empty-row">Loading visitors…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ALERTS VIEW ────────────────────────────────────────────── -->
+    <section class="view" id="view-alerts">
+      <div class="card full-width">
+        <div class="card-header">
+          <h3 class="card-title">Active Alerts</h3>
+          <div class="filter-row">
+            <label class="toggle-label">
+              <input type="checkbox" id="show-resolved"> Show resolved
+            </label>
+            <button class="btn btn-sm" id="load-alerts-btn">Refresh</button>
+          </div>
+        </div>
+        <div id="alerts-list" class="alerts-list">
+          <div class="empty-state">Loading alerts…</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

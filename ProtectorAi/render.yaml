@@ -1,0 +1,36 @@
+# render.yaml — Beast AI v1 Render deployment config
+# Commit this file to your repo and Render will pick it up automatically.
+# Docs: https://render.com/docs/yaml-spec
+
+services:
+  - type: web
+    name: beast-ai
+    env: node
+    plan: free          # change to starter for always-on production use
+    region: oregon      # closest to most US traffic; change to frankfurt/singapore as needed
+    branch: main
+    buildCommand: npm install
+    startCommand: node server/index.js
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Set these via the Render dashboard (Settings → Environment)
+      # or run: render env set KEY=VALUE --service beast-ai
+      - key: FIREBASE_PROJECT_ID
+        sync: false     # manually set in Render dashboard
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: DASHBOARD_TOKEN
+        generateValue: true   # Render auto-generates a secure random value
+      - key: RENDER_URL
+        fromService:
+          name: beast-ai
+          type: web
+          property: host       # auto-filled with your app's URL after first deploy
