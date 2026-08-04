@@ -51,10 +51,17 @@ async function getAlerts({ siteId, resolved = false, limit = 100 } = {}) {
   const filters = [['resolved', '==', resolved]];
   if (siteId) filters.push(['siteId', '==', siteId]);
 
-  return queryDocs(COLLECTIONS.ALERTS, filters, {
-    orderBy:  'timestamp',
-    orderDir: 'desc',
-    limit:    Math.min(limit, 200),
+  // No orderBy in the Firestore query — combining where() + orderBy() on different
+  // fields requires a composite index that may not exist. Sort in memory instead.
+  const docs = await queryDocs(COLLECTIONS.ALERTS, filters, {
+    limit: Math.min(limit, 200),
+  });
+
+  // Sort newest-first by timestamp string (ISO 8601 sorts lexicographically)
+  return docs.sort((a, b) => {
+    const ta = a.timestamp || a.createdAt || '';
+    const tb = b.timestamp || b.createdAt || '';
+    return tb < ta ? -1 : tb > ta ? 1 : 0;
   });
 }
 
