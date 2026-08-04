@@ -1,103 +1,110 @@
 /**
  * server/services/eventService.js
- * Beast AI — Event persistence service
- * Uses Firebase Realtime Database.
+ * Beast AI v2 — Event storage service
  */
 
 'use strict';
 
 const { pushRecord, getRecords, PATHS } = require('../../firebase/database');
-const { generateEventId, nowIso, truncate } = require('../utils/helpers');
+const { scoreEvent } = require('./riskEngine');
+const { broadcastToSite } = require('./socketService');
+const alertService = require('./alertService');
+const { incrementSiteStat } = require('./siteService');
+const logger = require('../utils/logger');
 
 /**
- * Persist a new event to the Realtime Database.
- * @param {object} payload — enriched event from the controller
- * @returns {Promise<{ eventId: string }>}
+ * Process and store an incoming event from beast.js.
  */
-async function createEvent(payload) {
-  const eventId = generateEventId();
+async function processEvent(rawEvent, clientIp) {
+  const { riskScore, riskLevel, riskReason, recommendedAction, detectedThreats } =
+    scoreEvent(rawEvent);
 
-  const doc = {
-    eventId,
-    timestamp:         nowIso(),
-
+  const eventDoc = {
     // Identity
-    siteId:            payload.siteId    || 'unknown',
-    visitorId:         payload.visitorId || 'unknown',
-
-    // Event classification
-    type:              payload.type      || 'unknown',
-
-    // Risk assessment
-    riskScore:         payload.riskScore         || 0,
-    riskLevel:         payload.riskLevel         || 'low',
-    riskReason:        payload.riskReason        || '',
-    recommendedAction: payload.recommendedAction || '',
-
-    // Request metadata
-    ip:                payload.ip        || 'unknown',
-    userAgent:         truncate(payload.userAgent || '', 300),
-
-    // Browser fingerprint (from SDK)
-    browser:           payload.browser   || 'unknown',
-    os:                payload.os        || 'unknown',
-    device:            payload.device    || 'unknown',
-    screen:            payload.screen    || null,
-    language:          payload.language  || 'unknown',
-    timezone:          payload.timezone  || 'unknown',
+    siteId:    rawEvent.siteId,
+    visitorId: rawEvent.visitorId,
+    sessionId: rawEvent.sessionId || null,
+    type:      rawEvent.type,
 
     // Page context
-    page:              truncate(payload.page     || '', 2048),
-    referrer:          truncate(payload.referrer || '', 2048),
+    page:     rawEvent.page     || '',
+    referrer: rawEvent.referrer || '',
+    title:    rawEvent.title    || '',
 
-    // Event-specific data (safe, size-capped)
-    data: _sanitizeData(payload.data),
+    // Fingerprint
+    browser:      rawEvent.browser      || 'unknown',
+    browserVersion: rawEvent.browserVersion || '',
+    os:           rawEvent.os           || 'unknown',
+    device:       rawEvent.device       || 'unknown',
+    screen:       rawEvent.screen       || '',
+    language:     rawEvent.language     || '',
+    timezone:     rawEvent.timezone     || '',
+    platform:     rawEvent.platform     || '',
+    userAgent:    rawEvent.userAgent    || '',
+
+    // Network
+    ip: clientIp || 'unknown',
+
+    // Risk
+    riskScore,
+    riskLevel,
+    riskReason,
+    recommendedAction,
+    detectedThreats: detectedThreats || [],
+
+    // Payload
+    data: rawEvent.data || {},
+
+    // Timestamps
+    timestamp: new Date().toISOString(),
   };
 
-  await pushRecord(PATHS.EVENTS, doc);
-  return { eventId };
+  const eventId = await pushRecord(PATHS.events(rawEvent.siteId), eventDoc);
+  const fullEvent = { ...eventDoc, id: eventId };
+
+  // Broadcast live event to dashboard
+  broadcastToSite(rawEvent.siteId, 'event:new', fullEvent);
+
+  // Increment site event counter
+  try { await incrementSiteStat(rawEvent.siteId, 'totalEvents'); } catch (_) {}
+
+  // Create alert for High/Critical events
+  if (riskLevel === 'high' || riskLevel === 'critical') {
+    try {
+      await alertService.createAlert({
+        siteId:    rawEvent.siteId,
+        eventId,
+        visitorId: rawEvent.visitorId,
+        type:      rawEvent.type,
+        riskScore,
+        riskLevel,
+        reason:    riskReason,
+        recommendedAction,
+        detectedThreats,
+        ip:        clientIp,
+        page:      rawEvent.page || '',
+      });
+    } catch (alertErr) {
+      logger.error('Failed to create alert', { message: alertErr.message });
+    }
+  }
+
+  return fullEvent;
 }
 
 /**
- * Query recent events with optional filters (applied in-memory).
- * @param {{ siteId?, limit?, type? }} options
+ * Fetch events for a site, with optional type filter.
  */
 async function getEvents({ siteId, limit = 100, type } = {}) {
-  const all = await getRecords(PATHS.EVENTS, {
+  const all = await getRecords(PATHS.events(siteId), {
     orderByField: 'timestamp',
-    limit: Math.min(limit * 4, 500), // fetch extra so in-memory filter has enough
+    limit: Math.min(limit * 3, 500),
   });
 
-  let results = all;
-  if (siteId) results = results.filter(e => e.siteId === siteId);
-  if (type)   results = results.filter(e => e.type   === type);
+  let results = siteId ? all.filter(e => e.siteId === siteId) : all;
+  if (type) results = results.filter(e => e.type === type);
 
   return results.slice(0, Math.min(limit, 200));
 }
 
-/**
- * Sanitise event-specific data:
- * - Must be a plain object
- * - String values truncated to 500 chars
- * - No nested objects deeper than 2 levels
- */
-function _sanitizeData(data) {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
-
-  const clean = {};
-  for (const [k, v] of Object.entries(data)) {
-    if (typeof v === 'string')  clean[k] = truncate(v, 500);
-    else if (typeof v === 'number' || typeof v === 'boolean') clean[k] = v;
-    else if (v && typeof v === 'object' && !Array.isArray(v)) {
-      const nested = {};
-      for (const [nk, nv] of Object.entries(v)) {
-        if (typeof nv === 'string')  nested[nk] = truncate(nv, 200);
-        else if (typeof nv === 'number' || typeof nv === 'boolean') nested[nk] = nv;
-      }
-      clean[k] = nested;
-    }
-  }
-  return clean;
-}
-
-module.exports = { createEvent, getEvents };
+module.exports = { processEvent, getEvents };

@@ -1,115 +1,69 @@
 /**
  * server/controllers/eventsController.js
- * Beast AI — Event controller
- * Handles ingesting SDK events and querying event history.
+ * Beast AI v2 — Events controller
  */
 
 'use strict';
 
-const eventService   = require('../services/eventService');
-const visitorService = require('../services/visitorService');
-const alertService   = require('../services/alertService');
-const riskEngine     = require('../services/riskEngine');
-const logger         = require('../utils/logger');
-const { successResponse, errorResponse, getClientIp } = require('../utils/helpers');
-
-/** Return true when the error is a Firebase-not-configured error */
-function isFirebaseNotConfigured(err) {
-  return err && err.message && (
-    err.message.includes('getRtdb() called before initFirebase') ||
-    err.message.includes('getDb() called before initFirebase') ||
-    err.message.includes('Missing Firebase credentials')
-  );
-}
+const { processEvent, getEvents } = require('../services/eventService');
+const { upsertVisitor } = require('../services/visitorService');
+const { getSiteByToken } = require('../services/siteService');
+const logger = require('../utils/logger');
+const { errorResponse, successResponse } = require('../utils/helpers');
 
 /**
  * POST /api/events
- * Receive a security event from beast.js SDK.
+ * Receive an event from beast.js. No auth required — token in header identifies site.
  */
 async function receiveEvent(req, res) {
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+
   try {
-    const ip       = getClientIp(req);
-    const ua       = req.headers['user-agent'] || 'unknown';
-    const siteId   = req.headers['x-beast-site-id'] || req.body.siteId;
-    const payload  = { ...req.body, siteId, ip, userAgent: ua };
+    const body = req.body;
 
-    // 1. Score the event
-    const risk = riskEngine.score(payload);
-
-    // 2. Persist event
-    const event = await eventService.createEvent({ ...payload, ...risk });
-
-    // 3. Upsert visitor record
-    await visitorService.upsertVisitor({
-      visitorId: payload.visitorId,
-      siteId,
-      ip,
-      userAgent: ua,
-      browser:   payload.browser,
-      os:        payload.os,
-      device:    payload.device,
-      country:   payload.country,
-      language:  payload.language,
-      timezone:  payload.timezone,
-    });
-
-    // 4. Create alert for High/Critical events
-    if (risk.riskLevel === 'high' || risk.riskLevel === 'critical') {
-      await alertService.createAlert({
-        eventId:           event.eventId,
-        siteId,
-        visitorId:         payload.visitorId,
-        type:              payload.type,
-        riskScore:         risk.riskScore,
-        riskLevel:         risk.riskLevel,
-        reason:            risk.riskReason,
-        recommendedAction: risk.recommendedAction,
-        ip,
-      });
+    // Resolve siteId from token header or body
+    let siteId = body.siteId;
+    const token = req.headers['x-beast-site-token'];
+    if (token) {
+      const site = await getSiteByToken(token);
+      if (site && site.active) {
+        siteId = site.siteId;
+      }
     }
 
-    logger.info('Event received', {
-      eventId:   event.eventId,
-      type:      payload.type,
-      siteId,
-      riskLevel: risk.riskLevel,
-      riskScore: risk.riskScore,
-    });
+    if (!siteId) {
+      return res.status(400).json(errorResponse('Missing siteId or valid site token', 'NO_SITE'));
+    }
 
-    return res.status(201).json(
-      successResponse({ eventId: event.eventId, riskLevel: risk.riskLevel })
+    const event = { ...body, siteId, userAgent: req.headers['user-agent'] || body.userAgent || '' };
+    const result = await processEvent(event, ip);
+
+    // Upsert visitor record (fire-and-forget on error)
+    upsertVisitor(event, ip).catch(err =>
+      logger.error('Visitor upsert failed', { message: err.message })
     );
+
+    res.status(202).json(successResponse({ eventId: result.id, riskLevel: result.riskLevel }));
   } catch (err) {
-    logger.error('receiveEvent error', { message: err.message });
-    if (isFirebaseNotConfigured(err)) {
-      return res.status(503).json(errorResponse(
-        'Database not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL in your Render environment variables.',
-        'DB_NOT_CONFIGURED'
-      ));
-    }
-    return res.status(500).json(errorResponse('Failed to process event', 'EVENT_ERROR'));
+    logger.error('receiveEvent error', { message: err.message, stack: err.stack });
+    res.status(500).json(errorResponse('Failed to process event', 'PROCESS_ERROR'));
   }
 }
 
 /**
- * GET /api/events
- * Fetch event history for the dashboard.
+ * GET /api/events?siteId=&limit=&type=
  */
-async function getEvents(req, res) {
+async function getEventsHandler(req, res) {
   try {
     const { siteId, limit = 100, type } = req.query;
-    const events = await eventService.getEvents({ siteId, limit, type });
-    return res.json(successResponse(events, { count: events.length }));
+    if (!siteId) return res.status(400).json(errorResponse('siteId required', 'MISSING_PARAM'));
+
+    const events = await getEvents({ siteId, limit: Number(limit), type });
+    res.json(successResponse({ events, count: events.length }));
   } catch (err) {
     logger.error('getEvents error', { message: err.message });
-    if (isFirebaseNotConfigured(err)) {
-      return res.status(503).json(errorResponse(
-        'Database not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL in your Render environment variables.',
-        'DB_NOT_CONFIGURED'
-      ));
-    }
-    return res.status(500).json(errorResponse('Failed to fetch events', 'FETCH_ERROR'));
+    res.status(500).json(errorResponse('Failed to fetch events', 'FETCH_ERROR'));
   }
 }
 
-module.exports = { receiveEvent, getEvents };
+module.exports = { receiveEvent, getEvents: getEventsHandler };

@@ -1,89 +1,73 @@
 /**
  * server/app.js
- * Beast AI — Express application setup
- * Wires middleware, routes, and error handling.
+ * Beast AI v2 — Express application setup
  */
 
 'use strict';
 
-const express = require('express');
-const path    = require('path');
+const express  = require('express');
+const path     = require('path');
 
 const requestLogger              = require('./middleware/logger');
 const { helmetMiddleware,
         buildCorsMiddleware,
         apiLimiter }             = require('./middleware/security');
-const dashboardAuth              = require('./middleware/dashboardAuth');
 const logger                     = require('./utils/logger');
 const { errorResponse }          = require('./utils/helpers');
 
-// ── Route imports ─────────────────────────────────────────────
 const healthRoutes   = require('./routes/health');
 const eventRoutes    = require('./routes/events');
 const statsRoutes    = require('./routes/stats');
 const visitorRoutes  = require('./routes/visitors');
 const alertRoutes    = require('./routes/alerts');
+const siteRoutes     = require('./routes/sites');
 const sdkRoute       = require('./routes/sdk');
 
 const app = express();
 
-// ── Trust proxy (Render sits behind a load balancer) ─────────
 app.set('trust proxy', 1);
-
-// ── Security headers ──────────────────────────────────────────
 app.use(helmetMiddleware);
-
-// ── CORS ──────────────────────────────────────────────────────
 app.use(buildCorsMiddleware());
-
-// ── Body parsing ──────────────────────────────────────────────
-app.use(express.json({ limit: '64kb' }));
-app.use(express.urlencoded({ extended: false, limit: '64kb' }));
-
-// ── Request logging ───────────────────────────────────────────
+app.use(express.json({ limit: '128kb' }));
+app.use(express.urlencoded({ extended: false, limit: '128kb' }));
 app.use(requestLogger);
 
-// ── SDK route (must come before static, injects backend URL) ──
+// SDK — served before static
 app.use('/beast.js', sdkRoute);
 
-// ── Static files (dashboard assets) ──────────────────────────
+// Static assets
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/dashboard', express.static(path.join(__dirname, '..', 'dashboard')));
 
-// ── Global API rate limiter ───────────────────────────────────
+// API rate limiter
 app.use('/api', apiLimiter);
 
-// ── Routes ────────────────────────────────────────────────────
+// Routes
 app.use('/health',        healthRoutes);
 app.use('/api/events',    eventRoutes);
 app.use('/api/stats',     statsRoutes);
 app.use('/api/visitors',  visitorRoutes);
 app.use('/api/alerts',    alertRoutes);
+app.use('/api/sites',     siteRoutes);
 
-// ── Root → redirect to dashboard ─────────────────────────────
-app.get('/', (req, res) => {
-  res.redirect(301, '/dashboard');
-});
+// Root → dashboard
+app.get('/', (_req, res) => res.redirect(301, '/dashboard/'));
+app.get('/dashboard', (_req, res) =>
+  res.sendFile(path.join(__dirname, '..', 'dashboard', 'index.html'))
+);
 
-// ── Dashboard SPA (auth-protected) ───────────────────────────
-app.get('/dashboard', dashboardAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'dashboard', 'index.html'));
-});
-
-// ── 404 handler ───────────────────────────────────────────────
+// 404
 app.use((req, res) => {
   res.status(404).json(errorResponse('Route not found', 'NOT_FOUND'));
 });
 
-// ── Global error handler ──────────────────────────────────────
+// Global error handler
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   logger.error('Unhandled error', { message: err.message, stack: err.stack });
-
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json(errorResponse('Invalid JSON body', 'INVALID_JSON'));
   }
-
   const status = err.status || err.statusCode || 500;
   res.status(status).json(
     errorResponse(

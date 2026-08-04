@@ -1,104 +1,134 @@
 /**
  * server/services/visitorService.js
- * Beast AI — Visitor persistence service
- * Uses Firebase Realtime Database.
- * Each visitor is stored at /visitors/{visitorId} — upserts are idempotent.
+ * Beast AI v2 — Visitor tracking service
  */
 
 'use strict';
 
-const { setRecord, getRecord, getRecords, getAllRecords, PATHS } = require('../../firebase/database');
-const { nowIso, truncate } = require('../utils/helpers');
-
-// A visitor is considered "live" if their lastSeen was within this window
-const LIVE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const { setRecord, getRecord, getRecords, PATHS, nowIso } = require('../../firebase/database');
+const { getRtdb } = require('../../firebase/admin');
+const { broadcastToSite } = require('./socketService');
+const { incrementSiteStat } = require('./siteService');
 
 /**
- * Create or update a visitor record.
- * @param {object} info — visitor data extracted from the event
+ * Upsert visitor record. Creates on first visit, updates on subsequent.
  */
-async function upsertVisitor(info) {
-  const {
-    visitorId,
-    siteId,
-    ip,
-    userAgent,
-    browser,
-    os,
-    device,
-    country,
-    language,
-    timezone,
-  } = info;
+async function upsertVisitor(event, clientIp) {
+  const { siteId, visitorId, sessionId } = event;
+  if (!siteId || !visitorId) return null;
 
-  if (!visitorId) return;
+  const db  = getRtdb();
+  const ref = db.ref(`${PATHS.visitors(siteId)}/${visitorId}`);
+  const snap = await ref.once('value');
+  const existing = snap.exists() ? snap.val() : null;
 
-  const now = nowIso();
+  const page = event.page || '';
+  const now  = nowIso();
 
-  // Fetch existing record to preserve firstSeen
-  const existing = await getRecord(PATHS.VISITORS, visitorId);
+  if (!existing) {
+    // New visitor
+    const doc = {
+      visitorId,
+      siteId,
+      sessionId,
+      ip:          clientIp || 'unknown',
+      browser:     event.browser     || 'unknown',
+      browserVersion: event.browserVersion || '',
+      os:          event.os          || 'unknown',
+      device:      event.device      || 'unknown',
+      screen:      event.screen      || '',
+      language:    event.language    || '',
+      timezone:    event.timezone    || '',
+      platform:    event.platform    || '',
+      userAgent:   event.userAgent   || '',
+      referrer:    event.referrer    || '',
 
-  const data = {
-    visitorId,
-    siteId:    siteId   || 'unknown',
-    ip:        ip       || 'unknown',
-    userAgent: truncate(userAgent || '', 300),
-    browser:   browser  || 'unknown',
-    os:        os       || 'unknown',
-    device:    device   || 'unknown',
-    country:   country  || 'unknown',
-    language:  language || 'unknown',
-    timezone:  timezone || 'unknown',
-    lastSeen:  now,
-    firstSeen: existing ? existing.firstSeen : now,
-    isLive:    true,
+      firstSeen:   now,
+      lastSeen:    now,
+      isNew:       true,
+      sessionCount: 1,
+      pageCount:   1,
+      pagesVisited: page ? [page] : [],
+      currentPage:  page,
+      online:      true,
+      createdAt:   now,
+      updatedAt:   now,
+    };
+
+    await ref.set(doc);
+    broadcastToSite(siteId, 'visitor:new', { ...doc, id: visitorId });
+
+    try { await incrementSiteStat(siteId, 'totalVisitors'); } catch (_) {}
+
+    return { ...doc, id: visitorId, isNew: true };
+  }
+
+  // Returning visitor — update
+  const pagesVisited = Array.isArray(existing.pagesVisited) ? existing.pagesVisited : [];
+  if (page && !pagesVisited.includes(page)) pagesVisited.push(page);
+  if (pagesVisited.length > 50) pagesVisited.shift(); // cap at 50
+
+  const isNewSession = sessionId && existing.sessionId !== sessionId;
+  const updates = {
+    lastSeen:     now,
+    currentPage:  page,
+    online:       true,
+    pagesVisited,
+    pageCount:    (existing.pageCount || 0) + 1,
+    sessionCount: isNewSession ? (existing.sessionCount || 1) + 1 : (existing.sessionCount || 1),
+    sessionId:    sessionId || existing.sessionId,
+    isNew:        false,
+    updatedAt:    now,
+    // Update fingerprint with latest values
+    browser:      event.browser     || existing.browser,
+    os:           event.os          || existing.os,
+    device:       event.device      || existing.device,
+    userAgent:    event.userAgent   || existing.userAgent,
   };
 
-  // setRecord uses the visitorId as the key so subsequent calls overwrite (upsert)
-  await setRecord(PATHS.VISITORS, visitorId, data);
+  await ref.update(updates);
+  broadcastToSite(siteId, 'visitor:update', { ...existing, ...updates, id: visitorId });
+
+  return { ...existing, ...updates, id: visitorId, isNew: false };
 }
 
 /**
- * Get a list of visitors, newest-first by lastSeen.
- * @param {{ siteId?, limit? }} options
+ * Mark a visitor as offline (from heartbeat timeout or disconnect event).
+ */
+async function markVisitorOffline(siteId, visitorId) {
+  const db  = getRtdb();
+  const ref = db.ref(`${PATHS.visitors(siteId)}/${visitorId}`);
+  await ref.update({ online: false, updatedAt: nowIso() });
+  broadcastToSite(siteId, 'visitor:offline', { visitorId });
+}
+
+/**
+ * Get all visitors for a site.
  */
 async function getVisitors({ siteId, limit = 100 } = {}) {
-  const all = await getRecords(PATHS.VISITORS, {
+  if (!siteId) return [];
+  return await getRecords(PATHS.visitors(siteId), {
     orderByField: 'lastSeen',
-    limit: Math.min(limit * 4, 500),
+    limit: Math.min(limit, 200),
   });
-
-  let results = siteId ? all.filter(v => v.siteId === siteId) : all;
-  return results.slice(0, Math.min(limit, 200));
 }
 
 /**
- * Get a single visitor by ID.
- * @param {string} visitorId
+ * Get a single visitor.
  */
-async function getVisitorById(visitorId) {
-  return getRecord(PATHS.VISITORS, visitorId);
+async function getVisitor(siteId, visitorId) {
+  if (!siteId || !visitorId) return null;
+  return await getRecord(PATHS.visitors(siteId), visitorId);
 }
 
 /**
- * Count "live" visitors for a site.
- * A visitor is live if their lastSeen timestamp is within LIVE_WINDOW_MS.
- * @param {string|undefined} siteId
- * @returns {Promise<number>}
+ * Get currently online visitors for a site.
  */
-async function getLiveVisitorCount(siteId) {
-  const all = await getAllRecords(PATHS.VISITORS);
-  const cutoff = new Date(Date.now() - LIVE_WINDOW_MS).toISOString();
-
-  return all.filter(v =>
-    v.lastSeen >= cutoff &&
-    (!siteId || v.siteId === siteId)
-  ).length;
+async function getLiveVisitors(siteId) {
+  const all = await getVisitors({ siteId, limit: 200 });
+  // Consider online if seen in last 3 minutes
+  const cutoff = Date.now() - 3 * 60 * 1000;
+  return all.filter(v => new Date(v.lastSeen).getTime() > cutoff);
 }
 
-module.exports = {
-  upsertVisitor,
-  getVisitors,
-  getVisitorById,
-  getLiveVisitorCount,
-};
+module.exports = { upsertVisitor, markVisitorOffline, getVisitors, getVisitor, getLiveVisitors };

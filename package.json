@@ -1,14 +1,14 @@
 {
   "name": "beast-ai",
-  "version": "1.0.0",
-  "description": "Beast AI v1 — Lightweight website security monitoring platform",
+  "version": "2.0.0",
+  "description": "Beast AI v2 — Multi-site security monitoring platform with real-time threat detection",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
     "lint": "eslint server/ --ext .js"
   },
-  "keywords": ["security", "monitoring", "analytics", "beast-ai"],
+  "keywords": ["security", "monitoring", "analytics", "beast-ai", "socket.io"],
   "author": "Beast AI",
   "license": "MIT",
   "dependencies": {
@@ -20,6 +20,7 @@
     "firebase-admin": "^12.2.0",
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
+    "socket.io": "^4.7.5",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

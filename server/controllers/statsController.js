@@ -1,120 +1,98 @@
 /**
  * server/controllers/statsController.js
- * Beast AI — Stats controller
- * Returns aggregated dashboard summary data.
- * Uses Firebase Realtime Database — all counts done in-memory.
+ * Beast AI v2 — Stats controller
  */
 
 'use strict';
 
-const visitorService = require('../services/visitorService');
-const logger         = require('../utils/logger');
-const { successResponse, errorResponse } = require('../utils/helpers');
-const { getAllRecords, getRecords, PATHS } = require('../../firebase/database');
+const { getEvents }       = require('../services/eventService');
+const { getVisitors, getLiveVisitors } = require('../services/visitorService');
+const { getAlerts }       = require('../services/alertService');
+const logger = require('../utils/logger');
+const { errorResponse, successResponse } = require('../utils/helpers');
 
-/**
- * GET /api/stats
- * Returns a full dashboard summary.
- */
 async function getStats(req, res) {
   try {
     const { siteId } = req.query;
+    if (!siteId) return res.status(400).json(errorResponse('siteId required', 'MISSING_PARAM'));
 
-    // Fetch all data in parallel
-    const [allEvents, allVisitors, allAlerts, liveVisitors] = await Promise.all([
-      getAllRecords(PATHS.EVENTS),
-      getAllRecords(PATHS.VISITORS),
-      getAllRecords(PATHS.ALERTS),
-      visitorService.getLiveVisitorCount(siteId),
+    const [events, visitors, alerts, liveVisitors] = await Promise.all([
+      getEvents({ siteId, limit: 200 }),
+      getVisitors({ siteId, limit: 500 }),
+      getAlerts({ siteId, resolved: false, limit: 200 }),
+      getLiveVisitors(siteId),
     ]);
 
-    // Apply siteId filter if provided
-    const events   = siteId ? allEvents.filter(e => e.siteId === siteId)   : allEvents;
-    const visitors = siteId ? allVisitors.filter(v => v.siteId === siteId) : allVisitors;
-    const alerts   = siteId ? allAlerts.filter(a => a.siteId === siteId)   : allAlerts;
+    // Aggregate browser stats
+    const browsers = {};
+    const oses     = {};
+    const devices  = {};
+    const eventTypes = {};
+    const riskLevels = { low: 0, medium: 0, high: 0, critical: 0 };
 
-    // Counts
-    const totalEvents    = events.length;
-    const totalVisitors  = visitors.length;
-    const totalAlerts    = alerts.filter(a => !a.resolved).length;
-    const criticalAlerts = alerts.filter(a => !a.resolved && a.riskLevel === 'critical').length;
-    const highAlerts     = alerts.filter(a => !a.resolved && a.riskLevel === 'high').length;
-    const jsErrors       = events.filter(e => e.type === 'js_error').length;
+    for (const ev of events) {
+      if (ev.browser) browsers[ev.browser] = (browsers[ev.browser] || 0) + 1;
+      if (ev.os)      oses[ev.os]          = (oses[ev.os]          || 0) + 1;
+      if (ev.device)  devices[ev.device]   = (devices[ev.device]   || 0) + 1;
+      if (ev.type)    eventTypes[ev.type]  = (eventTypes[ev.type]  || 0) + 1;
+      if (ev.riskLevel) riskLevels[ev.riskLevel] = (riskLevels[ev.riskLevel] || 0) + 1;
+    }
 
-    // Recent events (last 10, newest-first)
-    const recentEvents = events
-      .slice()
-      .sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1)
-      .slice(0, 10);
+    // Attack timeline — last 24h, bucketed by hour
+    const now       = Date.now();
+    const oneDayMs  = 24 * 60 * 60 * 1000;
+    const timeline  = {};
+    for (let h = 23; h >= 0; h--) {
+      const label = new Date(now - h * 3600000).toISOString().slice(11, 13) + ':00';
+      timeline[label] = 0;
+    }
+    for (const ev of events) {
+      const ts = new Date(ev.timestamp || ev.createdAt).getTime();
+      if (now - ts <= oneDayMs && (ev.riskLevel === 'high' || ev.riskLevel === 'critical')) {
+        const label = new Date(ts).toISOString().slice(11, 13) + ':00';
+        if (label in timeline) timeline[label]++;
+      }
+    }
 
-    // Sample for breakdowns (last 200 events)
-    const sample = recentEvents.length === events.length
-      ? events
-      : events
-          .slice()
-          .sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1)
-          .slice(0, 200);
+    // Threat type breakdown
+    const threats = {};
+    for (const ev of events) {
+      for (const t of (ev.detectedThreats || [])) {
+        threats[t] = (threats[t] || 0) + 1;
+      }
+    }
 
-    const browserBreakdown   = _breakdown(sample, 'browser');
-    const osBreakdown        = _breakdown(sample, 'os');
-    const eventTypeBreakdown = _breakdown(sample, 'type');
+    const stats = {
+      siteId,
+      summary: {
+        totalEvents:      events.length,
+        totalVisitors:    visitors.length,
+        liveVisitors:     liveVisitors.length,
+        activeAlerts:     alerts.length,
+        criticalAlerts:   alerts.filter(a => a.riskLevel === 'critical').length,
+        newVisitors:      visitors.filter(v => v.isNew).length,
+        returningVisitors: visitors.filter(v => !v.isNew).length,
+      },
+      browsers:    _topN(browsers, 8),
+      oses:        _topN(oses, 8),
+      devices:     _topN(devices, 5),
+      eventTypes:  _topN(eventTypes, 10),
+      riskLevels,
+      threats:     _topN(threats, 10),
+      attackTimeline: Object.entries(timeline).map(([hour, count]) => ({ hour, count })),
+    };
 
-    // Average threat score
-    const avgThreatScore = sample.length
-      ? Math.round(sample.reduce((acc, e) => acc + (e.riskScore || 0), 0) / sample.length)
-      : 0;
-
-    // Average page load time
-    const perfEvents  = sample.filter(e => e.type === 'performance' && e.data);
-    const avgLoadTime = perfEvents.length
-      ? Math.round(perfEvents.reduce((acc, e) => acc + (e.data.loadTime || 0), 0) / perfEvents.length)
-      : null;
-
-    return res.json(
-      successResponse({
-        summary: {
-          totalEvents,
-          totalVisitors,
-          liveVisitors,
-          totalAlerts,
-          criticalAlerts,
-          highAlerts,
-          jsErrors,
-          avgThreatScore,
-          avgLoadTime,
-        },
-        breakdowns: {
-          browsers:   browserBreakdown,
-          os:         osBreakdown,
-          eventTypes: eventTypeBreakdown,
-        },
-        recentEvents,
-      })
-    );
+    res.json(successResponse(stats));
   } catch (err) {
     logger.error('getStats error', { message: err.message });
-    if (err.message && (
-      err.message.includes('getRtdb() called before initFirebase') ||
-      err.message.includes('Missing Firebase credentials')
-    )) {
-      return res.status(503).json(errorResponse(
-        'Database not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL, and FIREBASE_DATABASE_URL in your Render environment variables.',
-        'DB_NOT_CONFIGURED'
-      ));
-    }
-    return res.status(500).json(errorResponse('Failed to fetch stats', 'STATS_ERROR'));
+    res.status(500).json(errorResponse('Failed to fetch stats', 'FETCH_ERROR'));
   }
 }
 
-/** Count occurrences of a field value across an array of objects */
-function _breakdown(items, field) {
-  const counts = {};
-  for (const item of items) {
-    const val = item[field] || 'unknown';
-    counts[val] = (counts[val] || 0) + 1;
-  }
-  return Object.entries(counts)
+function _topN(obj, n) {
+  return Object.entries(obj)
     .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
     .map(([name, count]) => ({ name, count }));
 }
 

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Beast AI — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+  <!-- ── Sidebar ──────────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">Beast<span class="logo-accent">AI</span></span>
+        <span class="logo-version">v2</span>
+      </div>
+    </div>
+
+    <!-- Site Selector -->
+    <div class="site-selector">
+      <button class="site-dropdown-btn" id="site-dropdown-btn">
+        <span class="site-icon">🌐</span>
+        <span class="site-name-text" id="selected-site-name">Select a site</span>
+        <span class="chevron">▾</span>
+      </button>
+      <div class="site-dropdown" id="site-dropdown" style="display:none">
+        <div id="site-list" class="site-list"></div>
+        <button class="add-site-btn" id="add-site-btn">+ Add Website</button>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-view="overview">
+        <span class="nav-icon">📊</span> Overview
+      </a>
+      <a href="#" class="nav-item" data-view="visitors">
+        <span class="nav-icon">👥</span> Visitors
+        <span class="nav-badge" id="badge-live" style="display:none">0</span>
+      </a>
+      <a href="#" class="nav-item" data-view="events">
+        <span class="nav-icon">📋</span> Events
+      </a>
+      <a href="#" class="nav-item" data-view="security">
+        <span class="nav-icon">🛡️</span> Security
+        <span class="nav-badge danger" id="badge-alerts" style="display:none">0</span>
+      </a>
+      <a href="#" class="nav-item" data-view="alerts">
+        <span class="nav-icon">🔔</span> Alerts
+      </a>
+      <a href="#" class="nav-item" data-view="sites">
+        <span class="nav-icon">🌐</span> My Websites
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-row">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-info">
+          <div class="user-email" id="user-email">Loading…</div>
+          <div class="user-plan">Free Plan</div>
+        </div>
+        <button class="logout-btn" id="logout-btn" title="Sign out">↪</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main area ─────────────────────────────────────────────── -->
+  <div class="main" id="main">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <button class="menu-toggle" id="menu-toggle">☰</button>
+      <div class="topbar-center">
+        <span class="topbar-title" id="view-title">Overview</span>
+      </div>
+      <div class="topbar-right">
+        <div class="connection-pill" id="connection-pill">
+          <span class="dot"></span>
+          <span id="connection-label">Connecting…</span>
+        </div>
+        <button class="btn-sm" id="refresh-btn" title="Refresh data">↻</button>
+      </div>
+    </header>
+
+    <!-- ── OVERVIEW VIEW ─────────────────────────────────────────── -->
+    <section class="view active" id="view-overview">
+      <div class="view-inner">
+
+        <!-- No site selected state -->
+        <div class="empty-state" id="no-site-state" style="display:none">
+          <div class="empty-icon">🌐</div>
+          <h3>No website selected</h3>
+          <p>Select a website from the sidebar or add your first one to get started.</p>
+          <button class="btn-primary" id="ov-add-site-btn">Add Website</button>
+        </div>
+
+        <!-- Stats grid -->
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card" id="stat-live">
+            <div class="stat-header">
+              <span class="stat-label">Live Visitors</span>
+              <span class="stat-icon live">●</span>
+            </div>
+            <div class="stat-value" id="val-live">—</div>
+            <div class="stat-sub" id="sub-live">right now</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Total Visitors</span>
+              <span class="stat-icon">👥</span>
+            </div>
+            <div class="stat-value" id="val-visitors">—</div>
+            <div class="stat-sub"><span id="val-new-v">—</span> new today</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Total Events</span>
+              <span class="stat-icon">📋</span>
+            </div>
+            <div class="stat-value" id="val-events">—</div>
+            <div class="stat-sub">last 200 loaded</div>
+          </div>
+          <div class="stat-card danger-card">
+            <div class="stat-header">
+              <span class="stat-label">Active Alerts</span>
+              <span class="stat-icon">🚨</span>
+            </div>
+            <div class="stat-value" id="val-alerts">—</div>
+            <div class="stat-sub"><span id="val-critical">—</span> critical</div>
+          </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="charts-row">
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">Browsers</h3></div>
+            <div class="bar-chart" id="chart-browsers"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">Operating Systems</h3></div>
+            <div class="bar-chart" id="chart-os"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">Risk Levels</h3></div>
+            <div class="risk-donut" id="chart-risks"></div>
+          </div>
+        </div>
+
+        <!-- Attack timeline -->
+        <div class="card full-width">
+          <div class="card-header">
+            <h3 class="card-title">Attack Timeline <span class="card-sub">(last 24h)</span></h3>
+          </div>
+          <div class="timeline-chart" id="attack-timeline"></div>
+        </div>
+
+        <!-- Live visitors + recent events -->
+        <div class="two-col">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Live Visitors</h3>
+              <span class="live-dot">●</span>
+            </div>
+            <div id="live-visitor-list" class="visitor-live-list">
+              <div class="empty-row">No active visitors</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">Recent Threats</h3></div>
+            <div id="threat-list" class="threat-list">
+              <div class="empty-row">No threats detected</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── VISITORS VIEW ──────────────────────────────────────────── -->
+    <section class="view" id="view-visitors">
+      <div class="view-inner">
+        <div class="card full-width">
+          <div class="card-header">
+            <h3 class="card-title">All Visitors</h3>
+            <div class="filter-row">
+              <input type="search" id="visitor-search" class="search-input" placeholder="Search visitor ID, browser, OS…">
+              <button class="btn-sm" id="load-visitors-btn">Refresh</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="visitors-table">
+              <thead>
+                <tr>
+                  <th>Visitor ID</th>
+                  <th>Status</th>
+                  <th>New/Return</th>
+                  <th>Browser</th>
+                  <th>OS</th>
+                  <th>Device</th>
+                  <th>Language</th>
+                  <th>Timezone</th>
+                  <th>Pages</th>
+                  <th>Last Seen</th>
+                  <th>First Seen</th>
+                </tr>
+              </thead>
+              <tbody id="visitors-tbody">
+                <tr><td colspan="11" class="empty-row">Select a site to view visitors</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Visitor detail modal -->
+        <div class="modal-overlay" id="visitor-modal" style="display:none">
+          <div class="modal">
+            <div class="modal-header">
+              <h3>Visitor Details</h3>
+              <button class="modal-close" id="visitor-modal-close">✕</button>
+            </div>
+            <div class="modal-body" id="visitor-modal-body"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── EVENTS VIEW ────────────────────────────────────────────── -->
+    <section class="view" id="view-events">
+      <div class="view-inner">
+        <div class="card full-width">
+          <div class="card-header">
+            <h3 class="card-title">Event History</h3>
+            <div class="filter-row">
+              <select id="event-type-filter" class="select-sm">
+                <option value="">All types</option>
+                <option value="page_view">Page Views</option>
+                <option value="session_start">Session Starts</option>
+                <option value="js_error">JS Errors</option>
+                <option value="failed_resource">Failed Resources</option>
+                <option value="rapid_clicks">Rapid Clicks</option>
+                <option value="rapid_form_submit">Rapid Form Submits</option>
+                <option value="sql_injection">SQL Injection</option>
+                <option value="xss_attempt">XSS Attempts</option>
+                <option value="path_traversal">Path Traversal</option>
+                <option value="suspicious_url">Suspicious URL</option>
+                <option value="brute_force">Brute Force</option>
+                <option value="bot_detected">Bot Detected</option>
+                <option value="headless_browser">Headless Browser</option>
+                <option value="devtools_open">DevTools Open</option>
+                <option value="selenium_detected">Selenium</option>
+                <option value="playwright_detected">Playwright</option>
+                <option value="puppeteer_detected">Puppeteer</option>
+                <option value="request_flood">Request Flood</option>
+                <option value="performance">Performance</option>
+                <option value="heartbeat">Heartbeat</option>
+              </select>
+              <input type="search" id="event-search" class="search-input" placeholder="Search events…">
+              <button class="btn-sm" id="load-events-btn">Load</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="events-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Type</th>
+                  <th>Risk</th>
+                  <th>Score</th>
+                  <th>Threats</th>
+                  <th>Visitor</th>
+                  <th>Page</th>
+                  <th>Browser</th>
+                  <th>OS</th>
+                </tr>
+              </thead>
+              <tbody id="events-tbody">
+                <tr><td colspan="9" class="empty-row">Select a site to view events</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SECURITY VIEW ─────────────────────────────────────────── -->
+    <section class="view" id="view-security">
+      <div class="view-inner">
+
+        <!-- Threat type breakdown -->
+        <div class="charts-row">
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">Threat Breakdown</h3></div>
+            <div class="bar-chart" id="chart-threats"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">Devices</h3></div>
+            <div class="bar-chart" id="chart-devices"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">Event Types</h3></div>
+            <div class="bar-chart" id="chart-event-types"></div>
+          </div>
+        </div>
+
+        <!-- Security events table -->
+        <div class="card full-width">
+          <div class="card-header">
+            <h3 class="card-title">Security Events</h3>
+            <div class="filter-row">
+              <select id="security-risk-filter" class="select-sm">
+                <option value="">All risk levels</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <button class="btn-sm" id="load-security-btn">Refresh</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="security-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Threat</th>
+                  <th>Risk</th>
+                  <th>Score</th>
+                  <th>Visitor</th>
+                  <th>IP</th>
+                  <th>Page</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="security-tbody">
+                <tr><td colspan="8" class="empty-row">Select a site to view security events</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ALERTS VIEW ────────────────────────────────────────────── -->
+    <section class="view" id="view-alerts">
+      <div class="view-inner">
+        <div class="card full-width">
+          <div class="card-header">
+            <h3 class="card-title">Active Alerts</h3>
+            <div class="filter-row">
+              <label class="checkbox-label">
+                <input type="checkbox" id="show-resolved"> Show resolved
+              </label>
+              <button class="btn-sm" id="load-alerts-btn">Refresh</button>
+            </div>
+          </div>
+          <div id="alerts-list" class="alerts-list">
+            <div class="empty-row">Select a site to view alerts</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── SITES VIEW ─────────────────────────────────────────────── -->
+    <section class="view" id="view-sites">
+      <div class="view-inner">
+        <div class="card full-width">
+          <div class="card-header">
+            <h3 class="card-title">My Websites</h3>
+            <button class="btn-primary btn-sm" id="sites-add-btn">+ Add Website</button>
+          </div>
+          <div id="sites-list" class="sites-list">
+            <div class="empty-row">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add site modal -->
+      <div class="modal-overlay" id="add-site-modal" style="display:none">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>Register a Website</h3>
+            <button class="modal-close" id="add-site-modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <form id="add-site-form">
+              <div class="field-group">
+                <label>Website Name</label>
+                <input type="text" id="site-name-input" placeholder="My Blog" required>
+              </div>
+              <div class="field-group">
+                <label>Domain</label>
+                <input type="text" id="site-domain-input" placeholder="myblog.com" required>
+              </div>
+              <div id="add-site-error" class="auth-error hidden"></div>
+              <button type="submit" class="btn-primary" id="add-site-submit">Register Site</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Installation modal -->
+      <div class="modal-overlay" id="install-modal" style="display:none">
+        <div class="modal modal-lg">
+          <div class="modal-header">
+            <h3>Installation</h3>
+            <button class="modal-close" id="install-modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <p class="modal-desc">Add this script tag before <code>&lt;/body&gt;</code> on every page of your website:</p>
+            <div class="code-block" id="install-code-block"></div>
+            <p class="modal-desc" style="margin-top:16px">Or use the universal script (auto-detects your token via URL parameter):</p>
+            <div class="code-block" id="install-code-universal"></div>
+            <p class="modal-hint">Your site token is unique to this website. Keep it private.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ── Toast container ────────────────────────────────────────── -->
+  <div id="toast-container"></div>
+
+  <!-- ── Real-time alert banner ─────────────────────────────────── -->
+  <div id="alert-banner" class="alert-banner hidden">
+    <span class="alert-banner-icon">🚨</span>
+    <span id="alert-banner-text"></span>
+    <button id="alert-banner-close">✕</button>
+  </div>
+
+  <!-- Firebase + Socket.IO -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="config.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

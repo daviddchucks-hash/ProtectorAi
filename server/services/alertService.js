@@ -1,75 +1,62 @@
 /**
  * server/services/alertService.js
- * Beast AI — Alert persistence service
- * Uses Firebase Realtime Database — no composite indexes required.
+ * Beast AI v2 — Alert service
  */
 
 'use strict';
 
-const { pushRecord, updateRecord, getRecords, PATHS } = require('../../firebase/database');
-const { generateAlertId, nowIso } = require('../utils/helpers');
+const { v4: uuidv4 } = require('uuid');
+const { pushRecord, updateRecord, getRecords, PATHS, nowIso } = require('../../firebase/database');
+const { broadcastToSite } = require('./socketService');
+const { incrementSiteStat } = require('./siteService');
 
-/**
- * Create a new alert record.
- * @param {object} data — alert payload from the events controller
- * @returns {Promise<{ alertId: string }>}
- */
 async function createAlert(data) {
-  const alertId = generateAlertId();
+  const alertId = 'alert_' + uuidv4().replace(/-/g, '').slice(0, 12);
 
   const doc = {
     alertId,
-    timestamp:         nowIso(),
-    resolved:          false,
-    resolvedAt:        null,
-
-    // Event reference
-    eventId:           data.eventId           || 'unknown',
-    siteId:            data.siteId            || 'unknown',
-    visitorId:         data.visitorId         || 'unknown',
-    type:              data.type              || 'unknown',
-
-    // Risk details
-    riskScore:         data.riskScore         || 0,
-    riskLevel:         data.riskLevel         || 'high',
-    reason:            data.reason            || '',
+    siteId:            data.siteId    || 'unknown',
+    eventId:           data.eventId   || 'unknown',
+    visitorId:         data.visitorId || 'unknown',
+    type:              data.type      || 'unknown',
+    detectedThreats:   data.detectedThreats || [],
+    riskScore:         data.riskScore || 0,
+    riskLevel:         data.riskLevel || 'high',
+    reason:            data.reason    || '',
     recommendedAction: data.recommendedAction || '',
-
-    // Network
-    ip:                data.ip                || 'unknown',
+    ip:                data.ip        || 'unknown',
+    page:              data.page      || '',
+    resolved:          false,
+    timestamp:         nowIso(),
   };
 
-  await pushRecord(PATHS.ALERTS, doc);
-  return { alertId };
+  const key = await pushRecord(PATHS.alerts(data.siteId), doc);
+  const fullAlert = { ...doc, id: key };
+
+  broadcastToSite(data.siteId, 'alert:new', fullAlert);
+
+  try { await incrementSiteStat(data.siteId, 'totalAlerts'); } catch (_) {}
+
+  return { alertId, key };
 }
 
-/**
- * Fetch alerts with optional filters (all filtering done in-memory — no indexes needed).
- * @param {{ siteId?, resolved?, limit? }} options
- */
 async function getAlerts({ siteId, resolved = false, limit = 100 } = {}) {
-  // Fetch a generous window ordered by timestamp
-  const all = await getRecords(PATHS.ALERTS, {
+  if (!siteId) return [];
+  const all = await getRecords(PATHS.alerts(siteId), {
     orderByField: 'timestamp',
-    limit: Math.min(limit * 5, 500),
+    limit: Math.min(limit * 3, 500),
   });
 
-  // Filter in-memory — no composite index required
   let results = all.filter(a => a.resolved === resolved);
-  if (siteId) results = results.filter(a => a.siteId === siteId);
-
   return results.slice(0, Math.min(limit, 200));
 }
 
-/**
- * Mark an alert as resolved.
- * @param {string} firebaseKey — the Firebase push key (record id)
- */
-async function resolveAlert(firebaseKey) {
-  await updateRecord(PATHS.ALERTS, firebaseKey, {
+async function resolveAlert(siteId, firebaseKey) {
+  await updateRecord(PATHS.alerts(siteId), firebaseKey, {
     resolved:   true,
     resolvedAt: nowIso(),
   });
+  broadcastToSite(siteId, 'alert:resolved', { id: firebaseKey });
 }
 
 module.exports = { createAlert, getAlerts, resolveAlert };

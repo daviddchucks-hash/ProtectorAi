@@ -1,8 +1,6 @@
 /**
  * server/routes/alerts.js
- * Beast AI — Alert routes
- * GET   /api/alerts           — active alerts list
- * PATCH /api/alerts/:id/resolve — resolve an alert
+ * Beast AI v2 — Alert routes
  */
 
 'use strict';
@@ -12,9 +10,11 @@ const router     = express.Router();
 const controller = require('../controllers/alertsController');
 const { query }  = require('express-validator');
 const { handleValidationErrors } = require('../middleware/validate');
+const { requireAuth } = require('../middleware/auth');
 
 router.get(
   '/',
+  requireAuth,
   [
     query('siteId').optional().isString().isLength({ max: 128 }),
     query('resolved').optional().isBoolean().toBoolean(),
@@ -24,6 +24,6 @@ router.get(
   controller.getAlerts
 );
 
-router.patch('/:id/resolve', controller.resolveAlert);
+router.patch('/:id/resolve', requireAuth, controller.resolveAlert);
 
 module.exports = router;

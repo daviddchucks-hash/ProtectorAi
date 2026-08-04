@@ -1,7 +1,6 @@
 /**
  * server/middleware/security.js
- * Beast AI — Security middleware stack
- * Applies Helmet, CORS, and rate limiting.
+ * Beast AI v2 — Security middleware stack
  */
 
 'use strict';
@@ -11,55 +10,51 @@ const cors      = require('cors');
 const rateLimit = require('express-rate-limit');
 const logger    = require('../utils/logger');
 
-// ── Helmet (secure HTTP headers) ──────────────────────────────
 const helmetMiddleware = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:  ["'self'"],
-      scriptSrc:   ["'self'", "'unsafe-inline'"],   // dashboard inline scripts
-      styleSrc:    ["'self'", "'unsafe-inline'"],
-      imgSrc:      ["'self'", 'data:'],
-      connectSrc:  ["'self'"],
-      fontSrc:     ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'", 'https://www.gstatic.com', 'https://apis.google.com'],
+      styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc:     ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc:      ["'self'", 'data:', 'https:'],
+      connectSrc:  ["'self'", 'https://identitytoolkit.googleapis.com', 'https://*.firebaseio.com', 'wss://*.firebaseio.com'],
+      frameSrc:    ["'none'"],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
     },
   },
-  crossOriginEmbedderPolicy: false, // beast.js needs to be embeddable cross-origin
+  crossOriginEmbedderPolicy: false,
 });
 
-// ── CORS ──────────────────────────────────────────────────────
 function buildCorsMiddleware() {
-  // Always allow the GitHub Pages dashboard origin
   const GITHUB_PAGES_ORIGIN = 'https://daviddchucks-hash.github.io';
   const rawOrigins = process.env.ALLOWED_ORIGINS || '';
-  const whitelist  = [GITHUB_PAGES_ORIGIN, ...rawOrigins
-    .split(',')
-    .map(o => o.trim())
-    .filter(Boolean)];
+  const whitelist = [
+    GITHUB_PAGES_ORIGIN,
+    'http://localhost:3000',
+    'http://localhost:8080',
+    ...rawOrigins.split(',').map(o => o.trim()).filter(Boolean),
+  ];
 
-  // Use the dynamic (per-request) form of cors() so we can apply different
-  // policies to event ingestion vs. dashboard/API routes.
   return cors(function (req, callback) {
-
-    // ── Event ingestion: must accept POSTs from any website ──────────────
-    // beast.js is embedded on arbitrary third-party sites that we don't know
-    // in advance. We cannot restrict by origin here — doing so silently drops
-    // every event from every site that isn't in the whitelist.
+    // Event ingestion: accept from any website (beast.js is embedded everywhere)
     if (req.path.startsWith('/api/events')) {
       return callback(null, {
-        origin:              true,            // reflect any origin
+        origin:              true,
         methods:             ['POST', 'OPTIONS'],
-        allowedHeaders:      ['Content-Type', 'X-Beast-Site-Id'],
+        allowedHeaders:      ['Content-Type', 'X-Beast-Site-Token', 'X-Beast-Site-Id'],
         optionsSuccessStatus: 204,
       });
     }
 
-    // ── All other routes (dashboard API, stats, alerts, etc.) ────────────
-    // Restricted to the GitHub Pages origin + any ALLOWED_ORIGINS env list.
+    // SDK route: must be loadable by any origin
+    if (req.path === '/' && req.originalUrl.includes('beast.js')) {
+      return callback(null, { origin: true, methods: ['GET', 'OPTIONS'] });
+    }
+
     callback(null, {
       origin(origin, cb) {
-        // Allow server-to-server / curl (no Origin header) and whitelisted origins
         if (!origin || whitelist.includes(origin)) {
           cb(null, true);
         } else {
@@ -67,8 +62,8 @@ function buildCorsMiddleware() {
           cb(new Error(`Origin ${origin} not allowed by CORS`));
         }
       },
-      methods:          ['GET', 'POST', 'PATCH', 'OPTIONS'], // PATCH needed for resolveAlert
-      allowedHeaders:   ['Content-Type', 'Authorization', 'X-Beast-Site-Id'],
+      methods:          ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders:   ['Content-Type', 'Authorization', 'X-Beast-Site-Token', 'X-Beast-Site-Id'],
       exposedHeaders:   ['X-Request-Id'],
       credentials:      true,
       optionsSuccessStatus: 204,
@@ -76,45 +71,37 @@ function buildCorsMiddleware() {
   });
 }
 
-// ── Rate limiters ─────────────────────────────────────────────
-
-/** General API limiter */
 const apiLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 60_000,
-  max:      parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100,
+  max:      parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 200,
   standardHeaders: true,
   legacyHeaders:   false,
   handler(req, res) {
     logger.warn('Rate limit exceeded', { ip: req.ip, path: req.path });
-    res.status(429).json({
-      success: false,
-      error: { code: 'RATE_LIMITED', message: 'Too many requests — slow down.' },
-    });
+    res.status(429).json({ success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests.' } });
   },
 });
 
-/** Stricter limiter for event ingestion endpoint */
 const eventLimiter = rateLimit({
-  windowMs: 10_000,   // 10-second window
-  max:      50,        // max 50 events per 10s per IP
+  windowMs: 10_000,
+  max:      100,
   standardHeaders: true,
   legacyHeaders:   false,
-  keyGenerator: req => req.headers['x-beast-site-id'] || req.ip,
+  keyGenerator: req => req.headers['x-beast-site-token'] || req.headers['x-beast-site-id'] || req.ip,
   handler(req, res) {
-    logger.warn('Event rate limit exceeded', {
-      ip: req.ip,
-      siteId: req.headers['x-beast-site-id'],
-    });
-    res.status(429).json({
-      success: false,
-      error: { code: 'EVENT_RATE_LIMITED', message: 'Event rate limit exceeded.' },
-    });
+    logger.warn('Event rate limit exceeded', { ip: req.ip });
+    res.status(429).json({ success: false, error: { code: 'RATE_LIMITED', message: 'Event flood detected.' } });
   },
 });
 
-module.exports = {
-  helmetMiddleware,
-  buildCorsMiddleware,
-  apiLimiter,
-  eventLimiter,
-};
+const strictLimiter = rateLimit({
+  windowMs: 60_000,
+  max:      20,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  handler(req, res) {
+    res.status(429).json({ success: false, error: { code: 'RATE_LIMITED', message: 'Too many requests.' } });
+  },
+});
+
+module.exports = { helmetMiddleware, buildCorsMiddleware, apiLimiter, eventLimiter, strictLimiter };
