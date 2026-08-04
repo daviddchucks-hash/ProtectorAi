@@ -1,22 +1,19 @@
 /**
  * dashboard/config.js
- * Beast AI v2 — Frontend Firebase + Backend configuration
- *
- * IMPORTANT: After deploying to Render, update BEAST_AI_URL below.
- * Fill in your Firebase project settings from:
- *   Firebase Console → Project Settings → General → Your apps → Web app
+ * Beast AI v2 — Firebase + Backend configuration
  */
 
-// Backend URL (your Render deployment)
+// Your Render backend URL
 window.BEAST_AI_URL = 'https://protectorai-1.onrender.com';
 
 // Firebase Web SDK configuration
 window.BEAST_FIREBASE_CONFIG = {
-  apiKey:            "YOUR_FIREBASE_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  databaseURL:       "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID",
+  apiKey:            "AIzaSyDyZYZHAbg72_83ErHiTDXjA1Qif40BwSg",
+  authDomain:        "protectorai-fb3ef.firebaseapp.com",
+  databaseURL:       "https://protectorai-fb3ef-default-rtdb.firebaseio.com",
+  projectId:         "protectorai-fb3ef",
+  storageBucket:     "protectorai-fb3ef.firebasestorage.app",
+  messagingSenderId: "331204175965",
+  appId:             "1:331204175965:web:a0fb20304a0af5d42fc5b4",
+  measurementId:     "G-96L29EG0P6",
 };
