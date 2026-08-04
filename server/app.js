@@ -36,8 +36,21 @@ app.use(requestLogger);
 app.use('/beast.js', sdkRoute);
 
 // Static assets
-app.use(express.static(path.join(__dirname, '..', 'public')));
-app.use('/dashboard', express.static(path.join(__dirname, '..', 'dashboard')));
+// HTML files: no-cache so browsers always re-fetch the latest HTML
+// (which contains versioned JS/CSS URLs for proper cache-busting).
+// JS/CSS/images: allow caching for 1 day — version query strings in HTML
+// ensure browsers pick up new files after a deploy.
+const noCacheSetHeaders = (_res, _path) => {
+  if (_path.endsWith('.html')) {
+    _res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    _res.setHeader('Pragma',        'no-cache');
+    _res.setHeader('Expires',       '0');
+  } else {
+    _res.setHeader('Cache-Control', 'public, max-age=86400');
+  }
+};
+app.use(express.static(path.join(__dirname, '..', 'public'), { setHeaders: noCacheSetHeaders }));
+app.use('/dashboard', express.static(path.join(__dirname, '..', 'dashboard'), { setHeaders: noCacheSetHeaders }));
 
 // API rate limiter
 app.use('/api', apiLimiter);

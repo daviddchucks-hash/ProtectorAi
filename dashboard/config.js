@@ -1,12 +1,18 @@
 /**
  * dashboard/config.js
  * Beast AI v2 — Firebase + Backend configuration
+ *
+ * NOTE: Firebase Web API keys are client-side identifiers designed to be
+ * included in public code. They do NOT grant server-side access to your
+ * Firebase project — that requires the Admin SDK service account key
+ * (which is stored server-side only and never committed to git).
+ * See: https://firebase.google.com/docs/projects/api-keys
  */
 
 // Your Render backend URL
 window.BEAST_AI_URL = 'https://protectorai-1.onrender.com';
 
-// Firebase Web SDK configuration
+// Firebase Web SDK configuration (safe to be public — client-side identifier only)
 window.BEAST_FIREBASE_CONFIG = {
   apiKey:            "AIzaSyDyZYZHAbg72_83ErHiTDXjA1Qif40BwSg",
   authDomain:        "protectorai-fb3ef.firebaseapp.com",

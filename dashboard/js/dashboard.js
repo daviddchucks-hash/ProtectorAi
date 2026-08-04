@@ -3,22 +3,24 @@
  * Beast AI v2 — Main dashboard application
  * Handles: auth guard, site management, real-time Socket.IO, data fetching,
  *          charts, visitor/event/alert rendering, search/filter.
+ *
+ * Auth: uses Firebase Identity Toolkit REST API via sessionStorage tokens.
+ * No Firebase JS SDK dependency.
  */
 
 (function () {
   'use strict';
 
-  // ── Firebase init ─────────────────────────────────────────────
-  const config = window.BEAST_FIREBASE_CONFIG;
-  if (!firebase.apps.length) firebase.initializeApp(config);
-  const auth = firebase.auth();
+  // ── Auth config (REST API — no SDK) ──────────────────────────
+  const FIREBASE_API_KEY = window.BEAST_FIREBASE_CONFIG.apiKey;
+  const TOKEN_REFRESH_URL = 'https://securetoken.googleapis.com/v1/token';
 
   const API = (window.BEAST_AI_URL || '').replace(/\/$/, '');
 
   // ── App state ─────────────────────────────────────────────────
   const state = {
-    user:         null,
     idToken:      null,
+    userEmail:    null,
     sites:        [],
     currentSite:  null,
     stats:        null,
@@ -29,27 +31,73 @@
     socket:       null,
   };
 
-  // ── Auth guard ────────────────────────────────────────────────
-  auth.onAuthStateChanged(async user => {
-    if (!user) {
+  // ── Auth guard (sessionStorage-based) ────────────────────────
+  async function _initAuth() {
+    const token   = sessionStorage.getItem('beast_id_token');
+    const expiry  = parseInt(sessionStorage.getItem('beast_token_expiry') || '0', 10);
+    const refresh = sessionStorage.getItem('beast_refresh_token');
+
+    if (!token) {
       window.location.href = 'index.html';
       return;
     }
-    state.user    = user;
-    state.idToken = await user.getIdToken();
 
-    _updateUserUI(user);
+    // Refresh token if expired or close to expiry
+    if (Date.now() >= expiry && refresh) {
+      const refreshed = await _refreshToken(refresh);
+      if (!refreshed) {
+        _clearSession();
+        window.location.href = 'index.html';
+        return;
+      }
+    }
+
+    state.idToken   = sessionStorage.getItem('beast_id_token');
+    state.userEmail = sessionStorage.getItem('beast_user_email') || '';
+
+    _updateUserUI();
     _connectSocket();
     await _loadSites();
     _bindNav();
     _bindEvents();
     _bindSiteSelector();
     _bindSiteManagement();
-  });
+  }
 
-  // Token refresh every 50 minutes
+  _initAuth();
+
+  // ── Token refresh via REST API ────────────────────────────────
+  async function _refreshToken(refreshToken) {
+    try {
+      const res = await fetch(`${TOKEN_REFRESH_URL}?key=${FIREBASE_API_KEY}`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body:    `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      const expiresAt = Date.now() + (parseInt(data.expires_in, 10) - 60) * 1000;
+      sessionStorage.setItem('beast_id_token',      data.id_token);
+      sessionStorage.setItem('beast_refresh_token', data.refresh_token);
+      sessionStorage.setItem('beast_token_expiry',  String(expiresAt));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function _clearSession() {
+    ['beast_id_token','beast_refresh_token','beast_user_email',
+     'beast_user_uid','beast_token_expiry'].forEach(k => sessionStorage.removeItem(k));
+  }
+
+  // Proactive token refresh every 50 minutes
   setInterval(async () => {
-    if (state.user) state.idToken = await state.user.getIdToken(true);
+    const refresh = sessionStorage.getItem('beast_refresh_token');
+    if (refresh) {
+      const ok = await _refreshToken(refresh);
+      if (ok) state.idToken = sessionStorage.getItem('beast_id_token');
+    }
   }, 50 * 60 * 1000);
 
   // ── API helper ────────────────────────────────────────────────
@@ -64,15 +112,16 @@
   }
 
   // ── User UI ───────────────────────────────────────────────────
-  function _updateUserUI(user) {
-    const email   = user.email || '';
+  function _updateUserUI() {
+    const email   = state.userEmail || '';
     const initial = email[0]?.toUpperCase() || '?';
     document.getElementById('user-email').textContent  = email;
     document.getElementById('user-avatar').textContent = initial;
   }
 
   document.getElementById('logout-btn').addEventListener('click', () => {
-    auth.signOut().then(() => { window.location.href = 'index.html'; });
+    _clearSession();
+    window.location.href = 'index.html';
   });
 
   // ── Socket.IO ─────────────────────────────────────────────────
