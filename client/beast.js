@@ -32,7 +32,9 @@
   var FORM_WINDOW_MS     = 5000;
   var FORM_THRESHOLD     = 3;
   var HEARTBEAT_INTERVAL = 30000;
-  var RETRY_DELAYS       = [1000, 3000, 8000];
+  // Longer delays give the server time to wake from sleep (Render free tier
+  // cold-start can take 30-60 s). Four retries cover up to ~55 s total.
+  var RETRY_DELAYS       = [2000, 5000, 15000, 30000];
   var MAX_PAGES_TRACKED  = 50;
 
   // ── State ──────────────────────────────────────────────────────
@@ -66,6 +68,11 @@
   // ─────────────────────────────────────────────────────────────
 
   function _init() {
+    // Wake the server before sending events — Render free tier sleeps after
+    // inactivity and takes 30-60 s to respond. A cheap GET /health fires
+    // immediately; by the time the first event XHR goes out the server is
+    // already awake.
+    _wakeServer();
     _trackCurrentPage();
     _attachEventListeners();
     _startHeartbeat();
@@ -74,6 +81,15 @@
     _detectAutomation();
     _trackRequestFlood();
     _sendEvent('session_start', { sessionStart: new Date(_sessionStart).toISOString() });
+  }
+
+  // Fire a no-cors GET to /health so a sleeping server starts warming up
+  // immediately, before the first event POST is attempted.
+  function _wakeServer() {
+    try {
+      var img = new Image();
+      img.src = BACKEND_URL.replace(/\/$/, '') + '/health?_wake=' + Date.now();
+    } catch (_) {}
   }
 
   function _sendEvent(type, data) {
@@ -116,7 +132,8 @@
       xhr.open('POST', API_ENDPOINT, true);
       xhr.setRequestHeader('Content-Type', 'application/json');
       if (SITE_TOKEN) xhr.setRequestHeader('X-Beast-Site-Token', SITE_TOKEN);
-      xhr.timeout = 10000;
+      // 30 s timeout: accommodates Render free-tier cold-start (30-60 s).
+      xhr.timeout = 30000;
 
       xhr.onreadystatechange = function () {
         if (xhr.readyState !== 4) return;

@@ -8,6 +8,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { pushRecord, setRecord, updateRecord, getRecord, getRecords, deleteRecord, PATHS, nowIso } = require('../../firebase/database');
 const { getRtdb } = require('../../firebase/admin');
+const logger = require('../utils/logger');
 
 /**
  * Register a new website for a user.
@@ -49,13 +50,45 @@ async function getSiteById(siteId) {
 
 /**
  * Get a site by its token (for SDK authentication).
+ *
+ * Primary: reads the sitesByToken index for O(1) lookup.
+ * Fallback: if the index is missing (rare — transient Firebase write failure
+ * during createSite), scans the sites collection by token field and
+ * auto-repairs the index so the next lookup is fast again.
  */
 async function getSiteByToken(token) {
   const db   = getRtdb();
   const snap = await db.ref(`${PATHS.SITES_BY_TOKEN}/${token}`).once('value');
-  if (!snap.exists()) return null;
-  const siteId = snap.val();
-  return await getSiteById(siteId);
+
+  if (snap.exists()) {
+    const siteId = snap.val();
+    return await getSiteById(siteId);
+  }
+
+  // Index miss — fall back to a direct field query on /sites/
+  logger.warn('sitesByToken index miss — falling back to field scan', {
+    token: token ? token.slice(0, 12) + '…' : 'none',
+  });
+
+  const fallback = await db.ref(PATHS.SITES)
+    .orderByChild('token')
+    .equalTo(token)
+    .once('value');
+
+  if (!fallback.exists()) return null;
+
+  let site = null;
+  fallback.forEach(child => {
+    site = { id: child.key, ...child.val() };
+  });
+
+  if (site) {
+    // Repair the index so future lookups are fast
+    await db.ref(`${PATHS.SITES_BY_TOKEN}/${token}`).set(site.siteId);
+    logger.info('sitesByToken index repaired', { siteId: site.siteId });
+  }
+
+  return site;
 }
 
 /**
