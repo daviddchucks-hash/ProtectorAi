@@ -49,8 +49,16 @@ function buildCorsMiddleware() {
   ];
 
   return cors(function (req, callback) {
-    // Event ingestion: accept from any website (beast.js is embedded everywhere)
-    if (req.path.startsWith('/api/events')) {
+    // Event ingestion via beast.js: accept POST from any website.
+    // Only apply open CORS to POST (and its OPTIONS preflight) — NOT to the
+    // dashboard's GET /api/events, which must fall through to the whitelist below.
+    const isEventsPost =
+      req.path.startsWith('/api/events') &&
+      (req.method === 'POST' ||
+        (req.method === 'OPTIONS' &&
+          (req.headers['access-control-request-method'] || '').toUpperCase() === 'POST'));
+
+    if (isEventsPost) {
       return callback(null, {
         origin:              true,
         methods:             ['POST', 'OPTIONS'],
