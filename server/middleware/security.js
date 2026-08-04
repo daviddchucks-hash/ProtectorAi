@@ -30,7 +30,7 @@ const helmetMiddleware = helmet({
 
 // ── CORS ──────────────────────────────────────────────────────
 function buildCorsMiddleware() {
-  // Always allow the GitHub Pages dashboard origin so it can reach the Render backend
+  // Always allow the GitHub Pages dashboard origin
   const GITHUB_PAGES_ORIGIN = 'https://daviddchucks-hash.github.io';
   const rawOrigins = process.env.ALLOWED_ORIGINS || '';
   const whitelist  = [GITHUB_PAGES_ORIGIN, ...rawOrigins
@@ -38,24 +38,42 @@ function buildCorsMiddleware() {
     .map(o => o.trim())
     .filter(Boolean)];
 
-  const corsOptions = {
-    origin(origin, callback) {
-      // Allow requests with no origin (server-to-server, curl) or whitelisted
-      if (!origin || whitelist.length === 0 || whitelist.includes(origin)) {
-        callback(null, true);
-      } else {
-        logger.warn('CORS blocked', { origin });
-        callback(new Error(`Origin ${origin} not allowed by CORS`));
-      }
-    },
-    methods:          ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders:   ['Content-Type', 'Authorization', 'X-Beast-Site-Id'],
-    exposedHeaders:   ['X-Request-Id'],
-    credentials:      true,
-    optionsSuccessStatus: 204,
-  };
+  // Use the dynamic (per-request) form of cors() so we can apply different
+  // policies to event ingestion vs. dashboard/API routes.
+  return cors(function (req, callback) {
 
-  return cors(corsOptions);
+    // ── Event ingestion: must accept POSTs from any website ──────────────
+    // beast.js is embedded on arbitrary third-party sites that we don't know
+    // in advance. We cannot restrict by origin here — doing so silently drops
+    // every event from every site that isn't in the whitelist.
+    if (req.path.startsWith('/api/events')) {
+      return callback(null, {
+        origin:              true,            // reflect any origin
+        methods:             ['POST', 'OPTIONS'],
+        allowedHeaders:      ['Content-Type', 'X-Beast-Site-Id'],
+        optionsSuccessStatus: 204,
+      });
+    }
+
+    // ── All other routes (dashboard API, stats, alerts, etc.) ────────────
+    // Restricted to the GitHub Pages origin + any ALLOWED_ORIGINS env list.
+    callback(null, {
+      origin(origin, cb) {
+        // Allow server-to-server / curl (no Origin header) and whitelisted origins
+        if (!origin || whitelist.includes(origin)) {
+          cb(null, true);
+        } else {
+          logger.warn('CORS blocked', { origin });
+          cb(new Error(`Origin ${origin} not allowed by CORS`));
+        }
+      },
+      methods:          ['GET', 'POST', 'PATCH', 'OPTIONS'], // PATCH needed for resolveAlert
+      allowedHeaders:   ['Content-Type', 'Authorization', 'X-Beast-Site-Id'],
+      exposedHeaders:   ['X-Request-Id'],
+      credentials:      true,
+      optionsSuccessStatus: 204,
+    });
+  });
 }
 
 // ── Rate limiters ─────────────────────────────────────────────

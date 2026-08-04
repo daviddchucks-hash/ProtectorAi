@@ -13,6 +13,14 @@ const riskEngine     = require('../services/riskEngine');
 const logger         = require('../utils/logger');
 const { successResponse, errorResponse, getClientIp } = require('../utils/helpers');
 
+/** Return true when the error is a Firebase-not-configured error */
+function isFirebaseNotConfigured(err) {
+  return err && err.message && (
+    err.message.includes('getDb() called before initFirebase') ||
+    err.message.includes('Missing Firebase credentials')
+  );
+}
+
 /**
  * POST /api/events
  * Receive a security event from beast.js SDK.
@@ -72,6 +80,12 @@ async function receiveEvent(req, res) {
     );
   } catch (err) {
     logger.error('receiveEvent error', { message: err.message });
+    if (isFirebaseNotConfigured(err)) {
+      return res.status(503).json(errorResponse(
+        'Database not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL in your Render environment variables.',
+        'DB_NOT_CONFIGURED'
+      ));
+    }
     return res.status(500).json(errorResponse('Failed to process event', 'EVENT_ERROR'));
   }
 }
@@ -87,6 +101,12 @@ async function getEvents(req, res) {
     return res.json(successResponse(events, { count: events.length }));
   } catch (err) {
     logger.error('getEvents error', { message: err.message });
+    if (isFirebaseNotConfigured(err)) {
+      return res.status(503).json(errorResponse(
+        'Database not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL in your Render environment variables.',
+        'DB_NOT_CONFIGURED'
+      ));
+    }
     return res.status(500).json(errorResponse('Failed to fetch events', 'FETCH_ERROR'));
   }
 }
