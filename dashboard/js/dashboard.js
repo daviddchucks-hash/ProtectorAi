@@ -52,13 +52,17 @@
     state.idToken   = sessionStorage.getItem('beast_id_token');
     state.userEmail = sessionStorage.getItem('beast_user_email') || '';
 
+    // Load core UI first — bind nav/events BEFORE connecting the socket so
+    // a socket failure (e.g. CSP) can never block sites/tabs from working.
     _updateUserUI();
-    _connectSocket();
-    await _loadSites();
     _bindNav();
     _bindEvents();
     _bindSiteSelector();
     _bindSiteManagement();
+    await _loadSites();
+
+    // Socket is best-effort: if io is undefined (CSP or network) keep going.
+    try { _connectSocket(); } catch (e) { console.warn('Socket offline:', e); }
   }
 
   _initAuth();

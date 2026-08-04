@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/dashboard.css?v=2.2.0">
+  <link rel="stylesheet" href="css/dashboard.css?v=2.3.0">
 </head>
 <body>
 
@@ -523,11 +523,9 @@
     <button id="alert-banner-close">✕</button>
   </div>
 
-  <!-- Socket.IO + app -->
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <script src="config.js?v=2.2.0"></script>
-  <script src="js/dashboard.js?v=2.2.0"></script>
-  <script>window.BEAST_SITE_TOKEN = 'tok_d8d6456f838e4254838a53996749a6dc';</script>
-  <script src="https://protectorai-1.onrender.com/beast.js"></script>
+  <!-- Socket.IO — self-hosted so CSP 'self' allows it (CDN blocked dashboard init) -->
+  <script src="/socket.io.min.js"></script>
+  <script src="config.js?v=2.3.0"></script>
+  <script src="js/dashboard.js?v=2.3.0"></script>
 </body>
 </html>

@@ -22,7 +22,9 @@
 
   // ── Configuration ─────────────────────────────────────────────
   var BACKEND_URL  = window.BEAST_AI_URL    || '%%BEAST_BACKEND_URL%%';
-  var SITE_TOKEN   = window.BEAST_SITE_TOKEN || '%%BEAST_SITE_TOKEN%%' || '';
+  // Strip the server-side placeholder if it wasn't replaced at serve time
+  var _rawToken    = window.BEAST_SITE_TOKEN || '%%BEAST_SITE_TOKEN%%' || '';
+  var SITE_TOKEN   = (_rawToken && _rawToken.startsWith('tok_')) ? _rawToken : '';
   var API_ENDPOINT = BACKEND_URL.replace(/\/$/, '') + '/api/events';
   var VERSION      = '2.0.0';
 
