@@ -16,6 +16,7 @@ const logger                     = require('./utils/logger');
 const { errorResponse }          = require('./utils/helpers');
 
 const healthRoutes   = require('./routes/health');
+const authRoutes     = require('./routes/auth');
 const eventRoutes    = require('./routes/events');
 const statsRoutes    = require('./routes/stats');
 const visitorRoutes  = require('./routes/visitors');
@@ -57,6 +58,7 @@ app.use('/api', apiLimiter);
 
 // Routes
 app.use('/health',        healthRoutes);
+app.use('/api/auth',      authRoutes);
 app.use('/api/events',    eventRoutes);
 app.use('/api/stats',     statsRoutes);
 app.use('/api/visitors',  visitorRoutes);

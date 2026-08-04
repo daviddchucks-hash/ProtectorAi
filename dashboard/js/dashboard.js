@@ -11,10 +11,7 @@
 (function () {
   'use strict';
 
-  // ── Auth config (REST API — no SDK) ──────────────────────────
-  const FIREBASE_API_KEY = window.BEAST_FIREBASE_CONFIG.apiKey;
-  const TOKEN_REFRESH_URL = 'https://securetoken.googleapis.com/v1/token';
-
+  // ── Auth config (token refresh proxied through server) ───────
   const API = (window.BEAST_AI_URL || '').replace(/\/$/, '');
 
   // ── App state ─────────────────────────────────────────────────
@@ -66,13 +63,13 @@
 
   _initAuth();
 
-  // ── Token refresh via REST API ────────────────────────────────
+  // ── Token refresh via server proxy ───────────────────────────
   async function _refreshToken(refreshToken) {
     try {
-      const res = await fetch(`${TOKEN_REFRESH_URL}?key=${FIREBASE_API_KEY}`, {
+      const res = await fetch(`${API}/api/auth/refresh`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body:    `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`,
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ refreshToken }),
       });
       if (!res.ok) return false;
       const data = await res.json();

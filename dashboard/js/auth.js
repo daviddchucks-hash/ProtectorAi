@@ -1,24 +1,26 @@
 /**
  * dashboard/js/auth.js
- * Beast AI v2 — Firebase Auth via REST API (no SDK dependency)
+ * Beast AI v2 — Firebase Auth via server proxy
  *
- * Uses Firebase Identity Toolkit REST API directly, which is more reliable
- * than the Firebase JS SDK in environments with strict CSP or network
- * restrictions. Tokens are stored in sessionStorage.
+ * All Firebase Identity Toolkit requests are routed through the Render
+ * backend (/api/auth/*) so that the API key's HTTP referrer restrictions
+ * (set in Google Cloud Console) don't block logins. Node.js has no HTTP
+ * Referer header, so the restriction is bypassed at the server level.
+ *
+ * Tokens are stored in sessionStorage; no Firebase JS SDK is required.
  */
 
 (function () {
   'use strict';
 
   // Guard: ensure config was loaded
-  if (!window.BEAST_FIREBASE_CONFIG || !window.BEAST_FIREBASE_CONFIG.apiKey) {
-    console.error('[auth] BEAST_FIREBASE_CONFIG not found — is config.js loaded?');
+  if (!window.BEAST_AI_URL) {
+    console.error('[auth] BEAST_AI_URL not found — is config.js loaded?');
     document.body.innerHTML = '<p style="color:red;padding:2rem">Configuration error. Please reload.</p>';
     return;
   }
 
-  const API_KEY   = window.BEAST_FIREBASE_CONFIG.apiKey;
-  const AUTH_BASE = 'https://identitytoolkit.googleapis.com/v1/accounts';
+  const API = (window.BEAST_AI_URL || '').replace(/\/$/, '');
 
   // ── Redirect if already logged in ───────────────────────────
   if (sessionStorage.getItem('beast_id_token')) {
@@ -57,7 +59,7 @@
 
     try {
       const { idToken, refreshToken, expiresIn, email: userEmail, localId } =
-        await _firebasePost(':signInWithPassword', { email, password, returnSecureToken: true });
+        await _authPost('/api/auth/signin', { email, password });
       _saveSession({ idToken, refreshToken, expiresIn, email: userEmail, localId });
       window.location.href = 'app.html';
     } catch (err) {
@@ -89,7 +91,7 @@
     _setLoading(btn, true);
     try {
       const { idToken, refreshToken, expiresIn, email: userEmail, localId } =
-        await _firebasePost(':signUp', { email, password, returnSecureToken: true });
+        await _authPost('/api/auth/signup', { email, password });
       _saveSession({ idToken, refreshToken, expiresIn, email: userEmail, localId });
       window.location.href = 'app.html';
     } catch (err) {
@@ -98,22 +100,23 @@
     }
   });
 
-  // ── Core Firebase REST helper ─────────────────────────────────
+  // ── Core auth proxy helper ────────────────────────────────────
   /**
-   * POST to Firebase Identity Toolkit REST API.
+   * POST to the server-side auth proxy (/api/auth/*).
+   * The server forwards requests to Firebase with no HTTP Referer header,
+   * bypassing API key referrer restrictions.
    * Always throws an object with { code, rawMessage } on failure.
    */
-  async function _firebasePost(endpoint, body) {
+  async function _authPost(path, body) {
     let res, data;
     try {
-      res = await fetch(`${AUTH_BASE}${endpoint}?key=${API_KEY}`, {
+      res = await fetch(`${API}${path}`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
       });
     } catch (networkErr) {
-      // fetch() itself threw — offline, DNS failure, CORS hard-block, etc.
-      console.error('[auth] Network error reaching Firebase:', networkErr);
+      console.error('[auth] Network error reaching auth proxy:', networkErr);
       throw {
         code:       'auth/network-request-failed',
         rawMessage: networkErr.message || 'Failed to fetch',
@@ -123,7 +126,7 @@
     try {
       data = await res.json();
     } catch (parseErr) {
-      console.error('[auth] Could not parse Firebase response:', parseErr, 'HTTP', res.status);
+      console.error('[auth] Could not parse proxy response:', parseErr, 'HTTP', res.status);
       throw {
         code:       'auth/network-request-failed',
         rawMessage: `HTTP ${res.status} — non-JSON response`,
@@ -131,11 +134,12 @@
     }
 
     if (!res.ok) {
-      const rawMessage = data?.error?.message || `HTTP ${res.status}`;
-      console.error('[auth] Firebase error:', rawMessage, data);
+      // Proxy forwards Firebase's error body as-is; extract the message
+      const rawMessage = data?.error?.message || data?.error || `HTTP ${res.status}`;
+      console.error('[auth] Auth proxy error:', rawMessage, data);
       throw {
-        code:       _mapCode(rawMessage),
-        rawMessage,
+        code:       _mapCode(String(rawMessage)),
+        rawMessage: String(rawMessage),
       };
     }
 
@@ -208,11 +212,11 @@
       'auth/weak-password':         'Password must be at least 6 characters.',
       'auth/too-many-requests':     'Too many attempts. Please try again later.',
       'auth/user-disabled':         'This account has been disabled.',
-      'auth/network-request-failed':'Network error. Check your connection.',
+      'auth/network-request-failed':'Network error. Check your connection and try again.',
       'auth/operation-not-allowed': 'Email/password sign-in is not enabled. Enable it in Firebase Console → Authentication → Sign-in method.',
       'auth/admin-restricted':      'Sign-ups are restricted to admin invites.',
       'auth/unauthorized-domain':   'This domain is not authorised in Firebase. Add it under Firebase Console → Authentication → Settings → Authorised domains.',
-      'auth/invalid-api-key':       'Invalid Firebase API key. Check dashboard/config.js.',
+      'auth/invalid-api-key':       'Invalid Firebase API key. Check your server FIREBASE_API_KEY environment variable.',
     };
     return map[code] || `Authentication error (${code}).`;
   }
