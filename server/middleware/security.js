@@ -68,7 +68,7 @@ function buildCorsMiddleware() {
     }
 
     // SDK route: must be loadable by any origin
-    if (req.path === '/' && req.originalUrl.includes('beast.js')) {
+    if (req.originalUrl.includes('beast.js')) {
       return callback(null, { origin: true, methods: ['GET', 'OPTIONS'] });
     }
 

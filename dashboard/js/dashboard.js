@@ -320,7 +320,7 @@
     const site = state.sites.find(s => s.siteId === siteId);
     if (!site) return;
     const specificScript = `<script src="${API}/beast.js?token=${site.token}"><\/script>`;
-    const universalScript = `<script src="${API}/beast.js"><\/script>\n<script>window.BEAST_SITE_TOKEN = '${site.token}';<\/script>`;
+    const universalScript = `<script>window.BEAST_SITE_TOKEN = '${site.token}';<\/script>\n<script src="${API}/beast.js"><\/script>`;
     const codeBlock     = document.getElementById('install-code-block');
     const univBlock     = document.getElementById('install-code-universal');
     codeBlock.textContent = specificScript;
