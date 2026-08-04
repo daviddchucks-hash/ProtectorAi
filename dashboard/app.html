@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/dashboard.css?v=2.1.0">
+  <link rel="stylesheet" href="css/dashboard.css?v=2.2.0">
 </head>
 <body>
 
@@ -367,14 +367,104 @@
 
     <!-- ── SITES VIEW ─────────────────────────────────────────────── -->
     <section class="view" id="view-sites">
-      <div class="view-inner">
-        <div class="card full-width">
-          <div class="card-header">
-            <h3 class="card-title">My Websites</h3>
+      <!-- ── Sites list panel ──────────────────────────────────── -->
+      <div id="sites-list-panel">
+        <div class="view-inner">
+          <div class="sites-count-bar">
+            <div class="sites-count-info">
+              <span class="sites-count-num" id="sites-count-num">0</span>
+              <span class="sites-count-label">websites monitored</span>
+            </div>
             <button class="btn-primary btn-sm" id="sites-add-btn">+ Add Website</button>
           </div>
           <div id="sites-list" class="sites-list">
             <div class="empty-row">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Site detail panel ────────────────────────────────── -->
+      <div id="site-detail-panel" style="display:none">
+        <div class="view-inner">
+          <!-- Header row -->
+          <div class="site-detail-header">
+            <button class="btn-back" id="site-detail-back">← Back</button>
+            <div class="site-detail-title-block">
+              <span class="site-detail-icon">🌐</span>
+              <div>
+                <div class="site-detail-name" id="sdp-name">—</div>
+                <div class="site-detail-domain" id="sdp-domain">—</div>
+              </div>
+            </div>
+            <span class="script-status-pill" id="sdp-status-pill">Checking…</span>
+          </div>
+
+          <!-- Quick stats -->
+          <div class="sdp-stats-row">
+            <div class="sdp-stat">
+              <div class="sdp-stat-val" id="sdp-total-events">—</div>
+              <div class="sdp-stat-lbl">Total Events</div>
+            </div>
+            <div class="sdp-stat">
+              <div class="sdp-stat-val" id="sdp-total-visitors">—</div>
+              <div class="sdp-stat-lbl">Visitors</div>
+            </div>
+            <div class="sdp-stat">
+              <div class="sdp-stat-val" id="sdp-live-now">—</div>
+              <div class="sdp-stat-lbl">Live Now</div>
+            </div>
+            <div class="sdp-stat">
+              <div class="sdp-stat-val sdp-stat-sm" id="sdp-last-seen">—</div>
+              <div class="sdp-stat-lbl">Last Seen</div>
+            </div>
+          </div>
+
+          <!-- Script verification callout -->
+          <div class="script-verify-box" id="sdp-verify-box">
+            <div class="script-verify-icon" id="sdp-verify-icon">⏳</div>
+            <div class="script-verify-body">
+              <div class="script-verify-title" id="sdp-verify-title">Loading…</div>
+              <div class="script-verify-sub" id="sdp-verify-sub"></div>
+            </div>
+            <button class="btn-primary-sm sdp-install-btn" id="sdp-install-btn">View Script</button>
+          </div>
+
+          <!-- Recent events -->
+          <div class="card full-width" style="margin-top:20px">
+            <div class="card-header">
+              <h3 class="card-title">Recent Events <span class="card-sub" id="sdp-event-count"></span></h3>
+              <button class="btn-sm" id="sdp-refresh-btn">↻ Refresh</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Page</th>
+                    <th>Browser</th>
+                    <th>OS</th>
+                    <th>Device</th>
+                    <th>Risk</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody id="sdp-events-body">
+                  <tr><td colspan="7" class="empty-row">Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Pages & Browsers row -->
+          <div class="two-col" style="margin-top:16px;gap:16px;display:grid;grid-template-columns:1fr 1fr">
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Pages Visited</h3></div>
+              <div id="sdp-pages-list" class="sdp-pages-list"></div>
+            </div>
+            <div class="card">
+              <div class="card-header"><h3 class="card-title">Browsers</h3></div>
+              <div id="sdp-browsers-list" class="sdp-pages-list"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -435,9 +525,9 @@
 
   <!-- Socket.IO + app -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <script src="config.js?v=2.1.0"></script>
-  <script src="js/dashboard.js?v=2.1.0"></script>
+  <script src="config.js?v=2.2.0"></script>
+  <script src="js/dashboard.js?v=2.2.0"></script>
   <script>window.BEAST_SITE_TOKEN = 'tok_d8d6456f838e4254838a53996749a6dc';</script>
-<script src="https://protectorai-1.onrender.com/beast.js"></script>
+  <script src="https://protectorai-1.onrender.com/beast.js"></script>
 </body>
 </html>

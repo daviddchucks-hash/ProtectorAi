@@ -291,13 +291,16 @@
 
   function _renderSitesList() {
     const container = document.getElementById('sites-list');
+    const countEl   = document.getElementById('sites-count-num');
+    if (countEl) countEl.textContent = state.sites.length;
+
     if (!state.sites.length) {
       container.innerHTML = '<div class="empty-state"><div class="empty-icon">🌐</div><h3>No websites yet</h3><p>Register your first website to start monitoring it.</p></div>';
       return;
     }
 
     container.innerHTML = state.sites.map(site => `
-      <div class="site-card" data-site-id="${site.siteId}">
+      <div class="site-card site-card-clickable" data-site-id="${site.siteId}" onclick="window.__viewSiteDetails('${site.siteId}')">
         <div class="site-card-icon">🌐</div>
         <div class="site-card-info">
           <div class="site-card-name">${_esc(site.name)}</div>
@@ -307,13 +310,189 @@
           </div>
         </div>
         <div class="site-card-actions">
-          <button class="btn-primary-sm" onclick="window.__showInstall('${site.siteId}')">Install Script</button>
-          <button class="btn-outline" onclick="window.__rotateTok('${site.siteId}')">Rotate Token</button>
-          <button class="btn-outline danger" onclick="window.__deleteSite('${site.siteId}')">Delete</button>
+          <button class="btn-primary-sm" onclick="event.stopPropagation();window.__viewSiteDetails('${site.siteId}')">View Details</button>
+          <button class="btn-outline" onclick="event.stopPropagation();window.__showInstall('${site.siteId}')">Install Script</button>
+          <button class="btn-outline" onclick="event.stopPropagation();window.__rotateTok('${site.siteId}')">Rotate Token</button>
+          <button class="btn-outline danger" onclick="event.stopPropagation();window.__deleteSite('${site.siteId}')">Delete</button>
         </div>
+        <span class="site-card-arrow">›</span>
       </div>
     `).join('');
   }
+
+  // ── Site Detail Panel ─────────────────────────────────────────
+  window.__viewSiteDetails = async (siteId) => {
+    const site = state.sites.find(s => s.siteId === siteId);
+    if (!site) return;
+
+    // Switch panels
+    document.getElementById('sites-list-panel').style.display  = 'none';
+    document.getElementById('site-detail-panel').style.display = '';
+
+    // Populate header immediately
+    document.getElementById('sdp-name').textContent   = site.name;
+    document.getElementById('sdp-domain').textContent = site.domain;
+    _setSdpStatus('loading');
+    document.getElementById('sdp-total-events').textContent   = '—';
+    document.getElementById('sdp-total-visitors').textContent = '—';
+    document.getElementById('sdp-live-now').textContent       = '—';
+    document.getElementById('sdp-last-seen').textContent      = '—';
+    document.getElementById('sdp-event-count').textContent    = '';
+    document.getElementById('sdp-events-body').innerHTML      = '<tr><td colspan="7" class="empty-row">Loading…</td></tr>';
+    document.getElementById('sdp-pages-list').innerHTML       = '<div class="sdp-pages-empty">Loading…</div>';
+    document.getElementById('sdp-browsers-list').innerHTML    = '<div class="sdp-pages-empty">Loading…</div>';
+
+    // Install button wires to this site
+    document.getElementById('sdp-install-btn').onclick = () => window.__showInstall(siteId);
+
+    // Refresh button
+    document.getElementById('sdp-refresh-btn').onclick = () => window.__viewSiteDetails(siteId);
+
+    // Fetch events + stats in parallel
+    try {
+      const [evRes, viRes] = await Promise.all([
+        api(`/api/events?siteId=${encodeURIComponent(siteId)}&limit=25`),
+        api(`/api/visitors?siteId=${encodeURIComponent(siteId)}&limit=100`),
+      ]);
+
+      const events   = evRes.events   || [];
+      const visitors = viRes.visitors || [];
+
+      // Script status
+      const isActive = events.length > 0;
+      _setSdpStatus(isActive ? 'active' : 'waiting');
+
+      // Stats
+      document.getElementById('sdp-total-events').textContent   = events.length >= 25 ? '25+' : String(events.length);
+      document.getElementById('sdp-total-visitors').textContent = visitors.length;
+      document.getElementById('sdp-event-count').textContent    = `(${events.length} shown)`;
+
+      // Live visitors
+      const liveCount = visitors.filter(v => {
+        const last = new Date(v.lastSeen || v.updatedAt || 0).getTime();
+        return Date.now() - last < 5 * 60 * 1000;
+      }).length;
+      document.getElementById('sdp-live-now').textContent = liveCount;
+
+      // Last event time
+      if (events.length) {
+        const latest = events.reduce((a, b) =>
+          new Date(a.timestamp || 0) > new Date(b.timestamp || 0) ? a : b
+        );
+        document.getElementById('sdp-last-seen').textContent = _timeAgo(latest.timestamp);
+      } else {
+        document.getElementById('sdp-last-seen').textContent = 'Never';
+      }
+
+      // Events table
+      _renderSdpEventsTable(events);
+
+      // Pages breakdown
+      const pageCount = {};
+      for (const ev of events) {
+        const p = ev.page || ev.title || '(unknown)';
+        pageCount[p] = (pageCount[p] || 0) + 1;
+      }
+      _renderSdpTextList('sdp-pages-list', _topNObj(pageCount, 8), 'No pages recorded yet');
+
+      // Browsers breakdown
+      const browserCount = {};
+      for (const ev of events) {
+        const b = ev.browser || 'Unknown';
+        browserCount[b] = (browserCount[b] || 0) + 1;
+      }
+      _renderSdpTextList('sdp-browsers-list', _topNObj(browserCount, 6), 'No browser data yet');
+
+    } catch (err) {
+      _setSdpStatus('error');
+      document.getElementById('sdp-events-body').innerHTML =
+        `<tr><td colspan="7" class="empty-row">Error: ${_esc(err.message)}</td></tr>`;
+    }
+  };
+
+  function _setSdpStatus(status) {
+    const pill    = document.getElementById('sdp-status-pill');
+    const icon    = document.getElementById('sdp-verify-icon');
+    const title   = document.getElementById('sdp-verify-title');
+    const sub     = document.getElementById('sdp-verify-sub');
+    const box     = document.getElementById('sdp-verify-box');
+    if (status === 'active') {
+      pill.textContent  = '✅ Script Active';
+      pill.className    = 'script-status-pill script-status-active';
+      icon.textContent  = '✅';
+      title.textContent = 'Script is active — data is flowing in';
+      sub.textContent   = 'Events are being received from this website. Your beast.js tag is working correctly.';
+      box.className     = 'script-verify-box script-verify-active';
+    } else if (status === 'waiting') {
+      pill.textContent  = '⚠️ No Data Yet';
+      pill.className    = 'script-status-pill script-status-waiting';
+      icon.textContent  = '⚠️';
+      title.textContent = 'No events received yet — script not detected';
+      sub.textContent   = 'Add the script tag to your website and visit a page on it. Events will appear here within seconds.';
+      box.className     = 'script-verify-box script-verify-waiting';
+    } else if (status === 'error') {
+      pill.textContent  = '❌ Error';
+      pill.className    = 'script-status-pill script-status-error';
+      icon.textContent  = '❌';
+      title.textContent = 'Could not fetch data';
+      sub.textContent   = 'There was an error fetching events. Check your connection.';
+      box.className     = 'script-verify-box script-verify-waiting';
+    } else {
+      pill.textContent  = 'Checking…';
+      pill.className    = 'script-status-pill';
+      icon.textContent  = '⏳';
+      title.textContent = 'Checking script status…';
+      sub.textContent   = '';
+      box.className     = 'script-verify-box';
+    }
+  }
+
+  function _renderSdpEventsTable(events) {
+    const tbody = document.getElementById('sdp-events-body');
+    if (!events.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No events yet — add the script tag to your website to start collecting data.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = events.map(ev => `
+      <tr>
+        <td><code style="font-size:11px">${_esc(ev.type || '—')}</code></td>
+        <td title="${_esc(ev.page || '')}"><span class="mono">${_esc(_shortUrl(ev.page || '—'))}</span></td>
+        <td>${_esc(ev.browser || '—')}</td>
+        <td>${_esc(ev.os || '—')}</td>
+        <td>${_esc(ev.device || '—')}</td>
+        <td><span class="badge badge-${ev.riskLevel || 'low'}">${_esc(ev.riskLevel || 'low')}</span></td>
+        <td style="white-space:nowrap">${_timeAgo(ev.timestamp)}</td>
+      </tr>
+    `).join('');
+  }
+
+  function _renderSdpTextList(elId, items, emptyMsg) {
+    const el = document.getElementById(elId);
+    if (!items.length) {
+      el.innerHTML = `<div class="sdp-pages-empty">${_esc(emptyMsg)}</div>`;
+      return;
+    }
+    const max = items[0].count || 1;
+    el.innerHTML = items.map(item => `
+      <div class="sdp-page-row">
+        <div class="sdp-page-bar" style="width:${Math.round((item.count / max) * 100)}%"></div>
+        <div class="sdp-page-label" title="${_esc(item.name)}">${_esc(item.name)}</div>
+        <div class="sdp-page-count">${item.count}</div>
+      </div>
+    `).join('');
+  }
+
+  function _topNObj(obj, n) {
+    return Object.entries(obj)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, n)
+      .map(([name, count]) => ({ name, count }));
+  }
+
+  document.getElementById('site-detail-back').addEventListener('click', () => {
+    document.getElementById('site-detail-panel').style.display  = 'none';
+    document.getElementById('sites-list-panel').style.display   = '';
+  });
 
   // Expose site actions to inline onclick
   window.__showInstall = (siteId) => {
