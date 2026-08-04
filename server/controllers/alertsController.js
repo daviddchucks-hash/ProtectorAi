@@ -12,6 +12,7 @@ const { successResponse, errorResponse } = require('../utils/helpers');
 /** Return true when the error is a Firebase-not-configured error */
 function isFirebaseNotConfigured(err) {
   return err && err.message && (
+    err.message.includes('getRtdb() called before initFirebase') ||
     err.message.includes('getDb() called before initFirebase') ||
     err.message.includes('Missing Firebase credentials')
   );

@@ -2,16 +2,15 @@
  * server/controllers/statsController.js
  * Beast AI — Stats controller
  * Returns aggregated dashboard summary data.
+ * Uses Firebase Realtime Database — all counts done in-memory.
  */
 
 'use strict';
 
-const eventService   = require('../services/eventService');
 const visitorService = require('../services/visitorService');
-const alertService   = require('../services/alertService');
 const logger         = require('../utils/logger');
 const { successResponse, errorResponse } = require('../utils/helpers');
-const { countDocs, queryDocs, COLLECTIONS } = require('../../firebase/firestore');
+const { getAllRecords, getRecords, PATHS } = require('../../firebase/database');
 
 /**
  * GET /api/stats
@@ -20,37 +19,44 @@ const { countDocs, queryDocs, COLLECTIONS } = require('../../firebase/firestore'
 async function getStats(req, res) {
   try {
     const { siteId } = req.query;
-    const filters    = siteId ? [['siteId', '==', siteId]] : [];
 
-    // Run all counts in parallel for speed
-    const [
-      totalEvents,
-      totalVisitors,
-      totalAlerts,
-      criticalAlerts,
-      highAlerts,
-      jsErrors,
-      recentEvents,
-      liveVisitors,
-    ] = await Promise.all([
-      countDocs(COLLECTIONS.EVENTS, filters),
-      countDocs(COLLECTIONS.VISITORS, filters),
-      countDocs(COLLECTIONS.ALERTS, filters),
-      countDocs(COLLECTIONS.ALERTS, [...filters, ['riskLevel', '==', 'critical']]),
-      countDocs(COLLECTIONS.ALERTS,  [...filters, ['riskLevel', '==', 'high']]),
-      countDocs(COLLECTIONS.EVENTS, [...filters, ['type', '==', 'js_error']]),
-      queryDocs(COLLECTIONS.EVENTS, filters, { orderBy: 'timestamp', limit: 10 }),
+    // Fetch all data in parallel
+    const [allEvents, allVisitors, allAlerts, liveVisitors] = await Promise.all([
+      getAllRecords(PATHS.EVENTS),
+      getAllRecords(PATHS.VISITORS),
+      getAllRecords(PATHS.ALERTS),
       visitorService.getLiveVisitorCount(siteId),
     ]);
 
-    // Browser/OS breakdown from recent 200 events
-    const sample = await queryDocs(COLLECTIONS.EVENTS, filters, {
-      orderBy: 'timestamp',
-      limit:   200,
-    });
+    // Apply siteId filter if provided
+    const events   = siteId ? allEvents.filter(e => e.siteId === siteId)   : allEvents;
+    const visitors = siteId ? allVisitors.filter(v => v.siteId === siteId) : allVisitors;
+    const alerts   = siteId ? allAlerts.filter(a => a.siteId === siteId)   : allAlerts;
 
-    const browserBreakdown = _breakdown(sample, 'browser');
-    const osBreakdown      = _breakdown(sample, 'os');
+    // Counts
+    const totalEvents    = events.length;
+    const totalVisitors  = visitors.length;
+    const totalAlerts    = alerts.filter(a => !a.resolved).length;
+    const criticalAlerts = alerts.filter(a => !a.resolved && a.riskLevel === 'critical').length;
+    const highAlerts     = alerts.filter(a => !a.resolved && a.riskLevel === 'high').length;
+    const jsErrors       = events.filter(e => e.type === 'js_error').length;
+
+    // Recent events (last 10, newest-first)
+    const recentEvents = events
+      .slice()
+      .sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1)
+      .slice(0, 10);
+
+    // Sample for breakdowns (last 200 events)
+    const sample = recentEvents.length === events.length
+      ? events
+      : events
+          .slice()
+          .sort((a, b) => (b.timestamp || '') < (a.timestamp || '') ? -1 : 1)
+          .slice(0, 200);
+
+    const browserBreakdown   = _breakdown(sample, 'browser');
+    const osBreakdown        = _breakdown(sample, 'os');
     const eventTypeBreakdown = _breakdown(sample, 'type');
 
     // Average threat score
@@ -58,12 +64,10 @@ async function getStats(req, res) {
       ? Math.round(sample.reduce((acc, e) => acc + (e.riskScore || 0), 0) / sample.length)
       : 0;
 
-    // Performance stats
-    const perfEvents = sample.filter(e => e.type === 'performance' && e.data);
+    // Average page load time
+    const perfEvents  = sample.filter(e => e.type === 'performance' && e.data);
     const avgLoadTime = perfEvents.length
-      ? Math.round(
-          perfEvents.reduce((acc, e) => acc + (e.data.loadTime || 0), 0) / perfEvents.length
-        )
+      ? Math.round(perfEvents.reduce((acc, e) => acc + (e.data.loadTime || 0), 0) / perfEvents.length)
       : null;
 
     return res.json(
@@ -80,15 +84,24 @@ async function getStats(req, res) {
           avgLoadTime,
         },
         breakdowns: {
-          browsers: browserBreakdown,
-          os:       osBreakdown,
+          browsers:   browserBreakdown,
+          os:         osBreakdown,
           eventTypes: eventTypeBreakdown,
         },
-        recentEvents: recentEvents.slice(0, 10),
+        recentEvents,
       })
     );
   } catch (err) {
     logger.error('getStats error', { message: err.message });
+    if (err.message && (
+      err.message.includes('getRtdb() called before initFirebase') ||
+      err.message.includes('Missing Firebase credentials')
+    )) {
+      return res.status(503).json(errorResponse(
+        'Database not configured. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL, and FIREBASE_DATABASE_URL in your Render environment variables.',
+        'DB_NOT_CONFIGURED'
+      ));
+    }
     return res.status(500).json(errorResponse('Failed to fetch stats', 'STATS_ERROR'));
   }
 }

@@ -1,16 +1,16 @@
 /**
  * server/services/alertService.js
  * Beast AI — Alert persistence service
- * Creates alerts for High/Critical risk events and manages their lifecycle.
+ * Uses Firebase Realtime Database — no composite indexes required.
  */
 
 'use strict';
 
-const { addDoc, updateDoc, queryDocs, COLLECTIONS } = require('../../firebase/firestore');
+const { pushRecord, updateRecord, getRecords, PATHS } = require('../../firebase/database');
 const { generateAlertId, nowIso } = require('../utils/helpers');
 
 /**
- * Create a new alert document.
+ * Create a new alert record.
  * @param {object} data — alert payload from the events controller
  * @returns {Promise<{ alertId: string }>}
  */
@@ -39,38 +39,34 @@ async function createAlert(data) {
     ip:                data.ip                || 'unknown',
   };
 
-  await addDoc(COLLECTIONS.ALERTS, doc);
+  await pushRecord(PATHS.ALERTS, doc);
   return { alertId };
 }
 
 /**
- * Fetch alerts with optional filters.
+ * Fetch alerts with optional filters (all filtering done in-memory — no indexes needed).
  * @param {{ siteId?, resolved?, limit? }} options
  */
 async function getAlerts({ siteId, resolved = false, limit = 100 } = {}) {
-  const filters = [['resolved', '==', resolved]];
-  if (siteId) filters.push(['siteId', '==', siteId]);
-
-  // No orderBy in the Firestore query — combining where() + orderBy() on different
-  // fields requires a composite index that may not exist. Sort in memory instead.
-  const docs = await queryDocs(COLLECTIONS.ALERTS, filters, {
-    limit: Math.min(limit, 200),
+  // Fetch a generous window ordered by timestamp
+  const all = await getRecords(PATHS.ALERTS, {
+    orderByField: 'timestamp',
+    limit: Math.min(limit * 5, 500),
   });
 
-  // Sort newest-first by timestamp string (ISO 8601 sorts lexicographically)
-  return docs.sort((a, b) => {
-    const ta = a.timestamp || a.createdAt || '';
-    const tb = b.timestamp || b.createdAt || '';
-    return tb < ta ? -1 : tb > ta ? 1 : 0;
-  });
+  // Filter in-memory — no composite index required
+  let results = all.filter(a => a.resolved === resolved);
+  if (siteId) results = results.filter(a => a.siteId === siteId);
+
+  return results.slice(0, Math.min(limit, 200));
 }
 
 /**
  * Mark an alert as resolved.
- * @param {string} firestoreDocId — the Firestore document ID
+ * @param {string} firebaseKey — the Firebase push key (record id)
  */
-async function resolveAlert(firestoreDocId) {
-  await updateDoc(COLLECTIONS.ALERTS, firestoreDocId, {
+async function resolveAlert(firebaseKey) {
+  await updateRecord(PATHS.ALERTS, firebaseKey, {
     resolved:   true,
     resolvedAt: nowIso(),
   });

@@ -1,16 +1,16 @@
 /**
  * server/services/eventService.js
  * Beast AI — Event persistence service
- * Wraps Firestore operations for the events collection.
+ * Uses Firebase Realtime Database.
  */
 
 'use strict';
 
-const { addDoc, queryDocs, COLLECTIONS } = require('../../firebase/firestore');
+const { pushRecord, getRecords, PATHS } = require('../../firebase/database');
 const { generateEventId, nowIso, truncate } = require('../utils/helpers');
 
 /**
- * Persist a new event to Firestore.
+ * Persist a new event to the Realtime Database.
  * @param {object} payload — enriched event from the controller
  * @returns {Promise<{ eventId: string }>}
  */
@@ -47,33 +47,32 @@ async function createEvent(payload) {
     timezone:          payload.timezone  || 'unknown',
 
     // Page context
-    page:              truncate(payload.page      || '', 2048),
-    referrer:          truncate(payload.referrer  || '', 2048),
+    page:              truncate(payload.page     || '', 2048),
+    referrer:          truncate(payload.referrer || '', 2048),
 
     // Event-specific data (safe, size-capped)
     data: _sanitizeData(payload.data),
   };
 
-  await addDoc(COLLECTIONS.EVENTS, doc);
+  await pushRecord(PATHS.EVENTS, doc);
   return { eventId };
 }
 
 /**
- * Query recent events with optional filters.
+ * Query recent events with optional filters (applied in-memory).
  * @param {{ siteId?, limit?, type? }} options
  */
 async function getEvents({ siteId, limit = 100, type } = {}) {
-  const filters = [];
-  if (siteId) filters.push(['siteId', '==', siteId]);
-  if (type)   filters.push(['type',   '==', type]);
-
-  const events = await queryDocs(COLLECTIONS.EVENTS, filters, {
-    orderBy:  'timestamp',
-    orderDir: 'desc',
-    limit:    Math.min(limit, 200),
+  const all = await getRecords(PATHS.EVENTS, {
+    orderByField: 'timestamp',
+    limit: Math.min(limit * 4, 500), // fetch extra so in-memory filter has enough
   });
 
-  return events;
+  let results = all;
+  if (siteId) results = results.filter(e => e.siteId === siteId);
+  if (type)   results = results.filter(e => e.type   === type);
+
+  return results.slice(0, Math.min(limit, 200));
 }
 
 /**
@@ -90,7 +89,6 @@ function _sanitizeData(data) {
     if (typeof v === 'string')  clean[k] = truncate(v, 500);
     else if (typeof v === 'number' || typeof v === 'boolean') clean[k] = v;
     else if (v && typeof v === 'object' && !Array.isArray(v)) {
-      // One level deep allowed
       const nested = {};
       for (const [nk, nv] of Object.entries(v)) {
         if (typeof nv === 'string')  nested[nk] = truncate(nv, 200);

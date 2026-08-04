@@ -1,12 +1,13 @@
 /**
  * server/services/visitorService.js
  * Beast AI — Visitor persistence service
- * Maintains a unique profile per visitorId, updated on each event.
+ * Uses Firebase Realtime Database.
+ * Each visitor is stored at /visitors/{visitorId} — upserts are idempotent.
  */
 
 'use strict';
 
-const { setDoc, getDoc, queryDocs, countDocs, COLLECTIONS } = require('../../firebase/firestore');
+const { setRecord, getRecord, getRecords, getAllRecords, PATHS } = require('../../firebase/database');
 const { nowIso, truncate } = require('../utils/helpers');
 
 // A visitor is considered "live" if their lastSeen was within this window
@@ -14,8 +15,6 @@ const LIVE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Create or update a visitor record.
- * Uses the visitorId as the Firestore document ID so upserts are idempotent.
- *
  * @param {object} info — visitor data extracted from the event
  */
 async function upsertVisitor(info) {
@@ -36,8 +35,8 @@ async function upsertVisitor(info) {
 
   const now = nowIso();
 
-  // Check if visitor already exists (to preserve firstSeen)
-  const existing = await getDoc(COLLECTIONS.VISITORS, visitorId);
+  // Fetch existing record to preserve firstSeen
+  const existing = await getRecord(PATHS.VISITORS, visitorId);
 
   const data = {
     visitorId,
@@ -55,22 +54,22 @@ async function upsertVisitor(info) {
     isLive:    true,
   };
 
-  await setDoc(COLLECTIONS.VISITORS, visitorId, data, true /* merge */);
+  // setRecord uses the visitorId as the key so subsequent calls overwrite (upsert)
+  await setRecord(PATHS.VISITORS, visitorId, data);
 }
 
 /**
- * Get a list of visitors.
+ * Get a list of visitors, newest-first by lastSeen.
  * @param {{ siteId?, limit? }} options
  */
 async function getVisitors({ siteId, limit = 100 } = {}) {
-  const filters = [];
-  if (siteId) filters.push(['siteId', '==', siteId]);
-
-  return queryDocs(COLLECTIONS.VISITORS, filters, {
-    orderBy:  'lastSeen',
-    orderDir: 'desc',
-    limit:    Math.min(limit, 200),
+  const all = await getRecords(PATHS.VISITORS, {
+    orderByField: 'lastSeen',
+    limit: Math.min(limit * 4, 500),
   });
+
+  let results = siteId ? all.filter(v => v.siteId === siteId) : all;
+  return results.slice(0, Math.min(limit, 200));
 }
 
 /**
@@ -78,31 +77,23 @@ async function getVisitors({ siteId, limit = 100 } = {}) {
  * @param {string} visitorId
  */
 async function getVisitorById(visitorId) {
-  return getDoc(COLLECTIONS.VISITORS, visitorId);
+  return getRecord(PATHS.VISITORS, visitorId);
 }
 
 /**
  * Count "live" visitors for a site.
  * A visitor is live if their lastSeen timestamp is within LIVE_WINDOW_MS.
- *
- * Note: Firestore does not support timestamp arithmetic in queries,
- * so we fetch the last 500 visitors and filter in-memory.
- *
  * @param {string|undefined} siteId
  * @returns {Promise<number>}
  */
 async function getLiveVisitorCount(siteId) {
-  const filters = [];
-  if (siteId) filters.push(['siteId', '==', siteId]);
-
-  const visitors = await queryDocs(COLLECTIONS.VISITORS, filters, {
-    orderBy:  'lastSeen',
-    orderDir: 'desc',
-    limit:    500,
-  });
-
+  const all = await getAllRecords(PATHS.VISITORS);
   const cutoff = new Date(Date.now() - LIVE_WINDOW_MS).toISOString();
-  return visitors.filter(v => v.lastSeen >= cutoff).length;
+
+  return all.filter(v =>
+    v.lastSeen >= cutoff &&
+    (!siteId || v.siteId === siteId)
+  ).length;
 }
 
 module.exports = {

@@ -1,6 +1,7 @@
 /**
  * firebase/admin.js
  * Beast AI — Firebase Admin SDK initialisation
+ * Uses Firebase Realtime Database (not Firestore).
  * Singleton pattern — safe to import from multiple modules.
  */
 
@@ -13,28 +14,33 @@ let _initialized = false;
 /**
  * Initialise Firebase Admin SDK using environment variables.
  * Called once at server startup from server/index.js.
- * @returns {admin.app.App}
+ * Requires FIREBASE_DATABASE_URL in addition to the service-account vars.
  */
 function initFirebase() {
   if (_initialized) {
     return admin.app();
   }
 
-  const { FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL } = process.env;
+  const {
+    FIREBASE_PROJECT_ID,
+    FIREBASE_PRIVATE_KEY,
+    FIREBASE_CLIENT_EMAIL,
+    FIREBASE_DATABASE_URL,
+  } = process.env;
 
-  if (!FIREBASE_PROJECT_ID || !FIREBASE_PRIVATE_KEY || !FIREBASE_CLIENT_EMAIL) {
-    const msg = 'Missing Firebase credentials. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, and FIREBASE_CLIENT_EMAIL in .env';
+  if (!FIREBASE_PROJECT_ID || !FIREBASE_PRIVATE_KEY || !FIREBASE_CLIENT_EMAIL || !FIREBASE_DATABASE_URL) {
+    const msg =
+      'Missing Firebase credentials. Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, ' +
+      'FIREBASE_CLIENT_EMAIL, and FIREBASE_DATABASE_URL in your environment.';
     if (process.env.NODE_ENV === 'production') {
       throw new Error(msg);
     }
-    // In development, warn but don't crash — API endpoints that touch Firestore
-    // will return errors, but the server and health check will still start.
     console.warn(`[Firebase] WARNING: ${msg}`);
-    console.warn('[Firebase] Running in dev mode without Firebase — database endpoints will fail.');
+    console.warn('[Firebase] Running without Firebase — database endpoints will fail.');
     return null;
   }
 
-  // Render stores env vars with literal \n — convert to real newlines
+  // Render stores env vars with literal \\n — convert to real newlines
   const privateKey = FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
 
   try {
@@ -44,11 +50,12 @@ function initFirebase() {
         privateKey,
         clientEmail: FIREBASE_CLIENT_EMAIL,
       }),
+      databaseURL: FIREBASE_DATABASE_URL,
     });
   } catch (err) {
     if (process.env.NODE_ENV === 'production') throw err;
     console.warn(`[Firebase] WARNING: Failed to initialize — ${err.message}`);
-    console.warn('[Firebase] Running in dev mode without Firebase — database endpoints will fail.');
+    console.warn('[Firebase] Running without Firebase — database endpoints will fail.');
     return null;
   }
 
@@ -58,14 +65,14 @@ function initFirebase() {
 }
 
 /**
- * Return the Firestore database instance.
+ * Return the Firebase Realtime Database instance.
  * Requires initFirebase() to have been called first.
  */
-function getDb() {
+function getRtdb() {
   if (!_initialized) {
-    throw new Error('[Firebase] getDb() called before initFirebase()');
+    throw new Error('[Firebase] getRtdb() called before initFirebase()');
   }
-  return admin.firestore();
+  return admin.database();
 }
 
-module.exports = { initFirebase, getDb };
+module.exports = { initFirebase, getRtdb };
