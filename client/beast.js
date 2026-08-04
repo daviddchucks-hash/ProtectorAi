@@ -21,12 +21,33 @@
   'use strict';
 
   // ── Configuration ─────────────────────────────────────────────
-  var BACKEND_URL  = window.BEAST_AI_URL    || '%%BEAST_BACKEND_URL%%';
+  var _rawBackend = window.BEAST_AI_URL || '%%BEAST_BACKEND_URL%%';
+  // Ensure backend URL always has a protocol prefix (guards against render.yaml
+  // injecting a bare hostname like "beast-ai.onrender.com" instead of
+  // "https://beast-ai.onrender.com").
+  var BACKEND_URL = (_rawBackend && _rawBackend.indexOf('://') === -1 && _rawBackend !== '%%BEAST_BACKEND_URL%%')
+    ? 'https://' + _rawBackend
+    : _rawBackend;
   // Strip the server-side placeholder if it wasn't replaced at serve time
   var _rawToken    = window.BEAST_SITE_TOKEN || '%%BEAST_SITE_TOKEN%%' || '';
   var SITE_TOKEN   = (_rawToken && _rawToken.startsWith('tok_')) ? _rawToken : '';
   var API_ENDPOINT = BACKEND_URL.replace(/\/$/, '') + '/api/events';
   var VERSION      = '2.0.0';
+
+  // Log initialisation info so developers can verify the pipeline in console
+  if (typeof console !== 'undefined' && console.info) {
+    console.info('[BeastAI] v' + VERSION + ' initialising', {
+      backend:   BACKEND_URL,
+      endpoint:  API_ENDPOINT,
+      hasToken:  !!SITE_TOKEN,
+      token:     SITE_TOKEN ? SITE_TOKEN.slice(0, 12) + '…' : '(none — events will be rejected)',
+    });
+    if (!SITE_TOKEN) {
+      console.warn('[BeastAI] No site token found. Events will be rejected by the server with 400 NO_SITE. ' +
+        'Use the script tag from your dashboard which includes ?token=tok_xxx, ' +
+        'e.g. <script src="' + BACKEND_URL + '/beast.js?token=tok_YOUR_TOKEN"></script>');
+    }
+  }
 
   // Behavioural thresholds
   var CLICK_WINDOW_MS    = 3000;
@@ -139,20 +160,60 @@
 
       xhr.onreadystatechange = function () {
         if (xhr.readyState !== 4) return;
-        if (xhr.status < 200 || xhr.status >= 300) {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // Success — optionally log for developers
+          if (typeof console !== 'undefined' && console.debug) {
+            try {
+              var resp = JSON.parse(xhr.responseText || '{}');
+              console.debug('[BeastAI] Event sent OK', { type: payload.type, status: xhr.status, eventId: resp.eventId, riskLevel: resp.riskLevel });
+            } catch (_) {}
+          }
+        } else {
+          // Log the failure so developers see it in the browser console
+          if (typeof console !== 'undefined' && console.warn) {
+            var errBody = '';
+            try { errBody = JSON.parse(xhr.responseText || '{}').error?.message || xhr.responseText; } catch (_) {}
+            console.warn('[BeastAI] Event POST failed (attempt ' + (attempt + 1) + ')', {
+              status:   xhr.status,
+              type:     payload.type,
+              endpoint: API_ENDPOINT,
+              error:    errBody,
+            });
+          }
           if (attempt < RETRY_DELAYS.length) {
             setTimeout(function () { _postWithRetry(payload, attempt + 1); }, RETRY_DELAYS[attempt]);
           }
         }
       };
+
+      // Network error (e.g. CORS preflight failure, server unreachable)
+      xhr.onerror = function () {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[BeastAI] Network error sending event (attempt ' + (attempt + 1) + ')', {
+            type:     payload.type,
+            endpoint: API_ENDPOINT,
+          });
+        }
+        if (attempt < RETRY_DELAYS.length) {
+          setTimeout(function () { _postWithRetry(payload, attempt + 1); }, RETRY_DELAYS[attempt]);
+        }
+      };
+
       xhr.ontimeout = function () {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[BeastAI] Event POST timed out (attempt ' + (attempt + 1) + ')', { type: payload.type });
+        }
         if (attempt < RETRY_DELAYS.length) {
           setTimeout(function () { _postWithRetry(payload, attempt + 1); }, RETRY_DELAYS[attempt]);
         }
       };
 
       xhr.send(JSON.stringify(payload));
-    } catch (_) { /* swallow */ }
+    } catch (err) {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[BeastAI] XHR construction error', { message: err && err.message });
+      }
+    }
   }
 
   // ─────────────────────────────────────────────────────────────

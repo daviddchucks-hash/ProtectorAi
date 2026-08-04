@@ -16,23 +16,60 @@ const { errorResponse, successResponse } = require('../utils/helpers');
  * Receive an event from beast.js. No auth required — token in header identifies site.
  */
 async function receiveEvent(req, res) {
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  const ip = req.ip || req.connection?.remoteAddress || 'unknown';
 
   try {
     const body = req.body;
 
+    // ── Detailed logging for pipeline debugging ─────────────────
+    const token = req.headers['x-beast-site-token'] || req.headers['x-beast-site-id'] || '';
+
+    logger.info('Event received', {
+      type:        body?.type     || '(none)',
+      visitorId:   body?.visitorId ? body.visitorId.slice(0, 20) + '…' : '(none)',
+      siteIdBody:  body?.siteId   || '(none)',
+      hasToken:    !!token,
+      tokenPrefix: token ? token.slice(0, 16) + '…' : '(none)',
+      ip,
+      origin:      req.headers.origin || '(none)',
+      referer:     req.headers.referer || '(none)',
+    });
+
+    // Validate that body was parsed (Content-Type: application/json required)
+    if (!body || typeof body !== 'object') {
+      logger.warn('Event rejected: body not parsed — check Content-Type header', { ip });
+      return res.status(400).json(errorResponse('Request body must be JSON with Content-Type: application/json', 'INVALID_BODY'));
+    }
+
     // Resolve siteId from token header or body
-    let siteId = body.siteId;
-    const token = req.headers['x-beast-site-token'];
+    let siteId = body.siteId || null;
+
     if (token) {
       const site = await getSiteByToken(token);
-      if (site && site.active) {
+      if (site) {
+        if (!site.active) {
+          logger.warn('Event rejected: site inactive', { token: token.slice(0, 16) });
+          return res.status(403).json(errorResponse('Site is inactive', 'SITE_INACTIVE'));
+        }
         siteId = site.siteId;
+        logger.debug('Site resolved from token', { siteId, domain: site.domain });
+      } else {
+        logger.warn('Event rejected: token not found', { token: token.slice(0, 16) });
+        return res.status(400).json(errorResponse('Invalid site token', 'INVALID_TOKEN'));
       }
     }
 
     if (!siteId) {
-      return res.status(400).json(errorResponse('Missing siteId or valid site token', 'NO_SITE'));
+      logger.warn('Event rejected: no siteId and no valid token', {
+        ip,
+        origin: req.headers.origin || '(none)',
+        tokenPresent: !!token,
+      });
+      return res.status(400).json(errorResponse(
+        'Missing siteId or X-Beast-Site-Token header. ' +
+        'Use the script tag from your dashboard which includes ?token=tok_xxx',
+        'NO_SITE'
+      ));
     }
 
     const event = { ...body, siteId, userAgent: req.headers['user-agent'] || body.userAgent || '' };
@@ -42,6 +79,8 @@ async function receiveEvent(req, res) {
     upsertVisitor(event, ip).catch(err =>
       logger.error('Visitor upsert failed', { message: err.message })
     );
+
+    logger.info('Event stored', { eventId: result.id, siteId, type: body.type, riskLevel: result.riskLevel });
 
     res.status(202).json(successResponse({ eventId: result.id, riskLevel: result.riskLevel }));
   } catch (err) {

@@ -20,12 +20,31 @@ function _getSource() {
   return _sdkSource;
 }
 
+/**
+ * Normalise a RENDER_URL that may be a bare hostname (e.g. "beast-ai.onrender.com")
+ * or a full URL (e.g. "https://beast-ai.onrender.com"). Always return a full https:// URL.
+ */
+function _normaliseBackendUrl(raw) {
+  if (!raw) return null;
+  const s = raw.trim().replace(/\/$/, '');
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  return 'https://' + s;
+}
+
 router.get('/', (req, res) => {
   try {
     const source = _getSource();
-    const backendUrl = process.env.RENDER_URL
-      ? process.env.RENDER_URL.replace(/\/$/, '')
+
+    // ── Resolve backend URL ─────────────────────────────────────────
+    // Priority:
+    //  1. RENDER_URL env var (normalised to ensure https:// prefix)
+    //  2. Derived from the incoming request (works with trust proxy: 1)
+    const rawRenderUrl = process.env.RENDER_URL;
+    const backendUrl = rawRenderUrl
+      ? _normaliseBackendUrl(rawRenderUrl)
       : (req.protocol + '://' + req.get('host'));
+
+    logger.debug('Serving beast.js', { backendUrl, hasToken: !!req.query.token });
 
     let served = source.replace(/%%BEAST_BACKEND_URL%%/g, backendUrl);
 
@@ -44,6 +63,7 @@ router.get('/', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
     res.setHeader('Cache-Control', cacheControl);
     res.setHeader('X-Beast-Version', '2.0.0');
+    res.setHeader('X-Beast-Backend', backendUrl);
     // Allow any origin to load beast.js
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(served);

@@ -62,6 +62,8 @@ async function processEvent(rawEvent, clientIp) {
   const eventId = await pushRecord(PATHS.events(rawEvent.siteId), eventDoc);
   const fullEvent = { ...eventDoc, id: eventId };
 
+  logger.debug('Event stored in Firebase', { eventId, siteId: rawEvent.siteId, type: rawEvent.type, riskLevel });
+
   // Broadcast live event to dashboard
   broadcastToSite(rawEvent.siteId, 'event:new', fullEvent);
 
@@ -94,17 +96,20 @@ async function processEvent(rawEvent, clientIp) {
 
 /**
  * Fetch events for a site, with optional type filter.
+ *
+ * Events are stored at events/{siteId}, so every record already belongs to
+ * this site — the secondary siteId filter is intentionally removed to avoid
+ * the 3× overfetch it required (limit * 3) and the redundant iteration.
  */
 async function getEvents({ siteId, limit = 100, type } = {}) {
+  if (!siteId) return [];
+
   const all = await getRecords(PATHS.events(siteId), {
     orderByField: 'timestamp',
-    limit: Math.min(limit * 3, 500),
+    limit:        Math.min(limit, 200),
   });
 
-  let results = siteId ? all.filter(e => e.siteId === siteId) : all;
-  if (type) results = results.filter(e => e.type === type);
-
-  return results.slice(0, Math.min(limit, 200));
+  return type ? all.filter(e => e.type === type) : all;
 }
 
 module.exports = { processEvent, getEvents };

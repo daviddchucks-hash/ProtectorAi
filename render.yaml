@@ -33,8 +33,17 @@ services:
         value: "60000"
       - key: RATE_LIMIT_MAX_REQUESTS
         value: "200"
+      # ── RENDER_URL ──────────────────────────────────────────────
+      # Set this manually in the Render dashboard to your full service URL,
+      # e.g. https://protectorai-1.onrender.com  (include https://)
+      #
+      # This is used in TWO critical places:
+      #   1. Injected into beast.js as the backend URL so monitored websites
+      #      know where to send events.
+      #   2. Added to the Socket.IO CORS whitelist so the dashboard can
+      #      receive real-time events.
+      #
+      # Without this set correctly, the SDK will generate invalid request URLs
+      # and real-time updates will be blocked.
       - key: RENDER_URL
-        fromService:
-          name: beast-ai
-          type: web
-          property: host
+        sync: false

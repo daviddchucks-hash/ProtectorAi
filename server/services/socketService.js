@@ -7,6 +7,7 @@
 
 const { Server } = require('socket.io');
 const logger = require('../utils/logger');
+const { _normaliseUrl } = require('../middleware/security');
 
 let _io = null;
 
@@ -20,9 +21,27 @@ function initSocket(httpServer) {
     ...rawOrigins.split(',').map(o => o.trim()).filter(Boolean),
   ];
 
+  // Add the Render deployment origin so the dashboard (served from the same
+  // server) can connect to Socket.IO. RENDER_URL may be a bare hostname or
+  // a full https:// URL — normalise it either way.
+  const renderUrl = _normaliseUrl(process.env.RENDER_URL);
+  if (renderUrl && !origins.includes(renderUrl)) {
+    origins.push(renderUrl);
+  }
+
+  logger.info('Socket.IO CORS origins', { origins });
+
   _io = new Server(httpServer, {
     cors: {
-      origin: origins,
+      // Use a function so we can allow same-origin requests
+      // (no Origin header) and every whitelisted origin.
+      origin(origin, callback) {
+        // Same-origin requests (no Origin header) — always allow.
+        if (!origin) return callback(null, true);
+        if (origins.includes(origin)) return callback(null, true);
+        logger.warn('Socket.IO CORS blocked', { origin });
+        callback(new Error(`Socket.IO: origin ${origin} not allowed`));
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -49,7 +68,7 @@ function initSocket(httpServer) {
     });
   });
 
-  logger.info('Socket.IO initialised');
+  logger.info('Socket.IO initialised', { originsCount: origins.length });
   return _io;
 }
 

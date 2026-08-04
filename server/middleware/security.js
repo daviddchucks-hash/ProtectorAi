@@ -10,6 +10,42 @@ const cors      = require('cors');
 const rateLimit = require('express-rate-limit');
 const logger    = require('../utils/logger');
 
+// ── Helper: normalise a URL/hostname to a full https:// URL ────
+function _normaliseUrl(raw) {
+  if (!raw) return null;
+  const s = raw.trim().replace(/\/$/, '');
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  return 'https://' + s;
+}
+
+const _renderUrl  = _normaliseUrl(process.env.RENDER_URL);
+const _renderHost = _renderUrl ? _renderUrl.replace(/^https?:\/\//, '') : null;
+
+// ── CSP connectSrc: include WSS for Socket.IO WebSocket transport
+const _connectSrc = [
+  "'self'",
+  'https://identitytoolkit.googleapis.com',
+  'https://securetoken.googleapis.com',
+  'https://firebaseinstallations.googleapis.com',
+  'https://firebase.googleapis.com',
+  'https://www.googleapis.com',
+  'https://apis.google.com',
+  'https://*.firebaseio.com',
+  'wss://*.firebaseio.com',
+  'https://*.googleapis.com',
+  // Socket.IO WebSocket transport on the same Render host
+  'ws://localhost:3000',
+  'wss://localhost:3000',
+  'ws://localhost:8080',
+  'wss://localhost:8080',
+];
+
+// Add production Render wss:// origin so Socket.IO WebSocket is not blocked
+if (_renderHost) {
+  _connectSrc.push('https://' + _renderHost);
+  _connectSrc.push('wss://' + _renderHost);
+}
+
 const helmetMiddleware = helmet({
   contentSecurityPolicy: {
     directives: {
@@ -18,18 +54,7 @@ const helmetMiddleware = helmet({
       styleSrc:    ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc:     ["'self'", 'https://fonts.gstatic.com'],
       imgSrc:      ["'self'", 'data:', 'https:'],
-      connectSrc:  [
-        "'self'",
-        'https://identitytoolkit.googleapis.com',
-        'https://securetoken.googleapis.com',
-        'https://firebaseinstallations.googleapis.com',
-        'https://firebase.googleapis.com',
-        'https://www.googleapis.com',
-        'https://apis.google.com',
-        'https://*.firebaseio.com',
-        'wss://*.firebaseio.com',
-        'https://*.googleapis.com',
-      ],
+      connectSrc:  _connectSrc,
       frameSrc:    ["'none'"],
       objectSrc:   ["'none'"],
       upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
@@ -47,6 +72,9 @@ function buildCorsMiddleware() {
     'http://localhost:8080',
     ...rawOrigins.split(',').map(o => o.trim()).filter(Boolean),
   ];
+
+  // Add the Render deployment origin so dashboard API calls are not blocked
+  if (_renderUrl) whitelist.push(_renderUrl);
 
   return cors(function (req, callback) {
     // Event ingestion via beast.js: accept POST from any website.
@@ -74,6 +102,7 @@ function buildCorsMiddleware() {
 
     callback(null, {
       origin(origin, cb) {
+        // Allow same-origin (no Origin header) or whitelisted origins
         if (!origin || whitelist.includes(origin)) {
           cb(null, true);
         } else {
@@ -123,4 +152,4 @@ const strictLimiter = rateLimit({
   },
 });
 
-module.exports = { helmetMiddleware, buildCorsMiddleware, apiLimiter, eventLimiter, strictLimiter };
+module.exports = { helmetMiddleware, buildCorsMiddleware, apiLimiter, eventLimiter, strictLimiter, _normaliseUrl };
