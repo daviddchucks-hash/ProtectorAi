@@ -50,8 +50,9 @@
       window.location.href = 'app.html';
     } catch (err) {
       _setLoading(btn, false);
-      loginError.textContent = _friendlyError(err.code);
+      loginError.textContent = `${_friendlyError(err.code)} [${err.code}]`;
       loginError.classList.remove('hidden');
+      console.error('Login error:', err);
     }
   });
 
@@ -81,8 +82,9 @@
       window.location.href = 'app.html';
     } catch (err) {
       _setLoading(btn, false);
-      regError.textContent = _friendlyError(err.code);
+      regError.textContent = `${_friendlyError(err.code)} [${err.code}]`;
       regError.classList.remove('hidden');
+      console.error('Register error:', err);
     }
   });
 
